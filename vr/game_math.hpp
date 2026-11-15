@@ -19,6 +19,16 @@ inline XrQuaternionf gameOrientation(float yaw, float pitch) {
     return product({0, -std::sin(yaw / 2), 0, std::cos(yaw / 2)},
                    {std::sin(pitch / 2), 0, 0, std::cos(pitch / 2)});
 }
+// Position is relative to the native game camera, whose world coordinates are
+// doubles. Keep only the small tracking displacement in float precision.
+inline XrPosef relativeEyePose(XrQuaternionf gameRotation, const XrPosef& anchor,
+                               const XrPosef& eye) {
+    const auto worldFromTracking = product(gameRotation, conjugate(anchor.orientation));
+    return {product(worldFromTracking, eye.orientation),
+            rotate(worldFromTracking,
+                   {eye.position.x - anchor.position.x, eye.position.y - anchor.position.y,
+                    eye.position.z - anchor.position.z})};
+}
 inline Matrix inverse(Matrix input) {
     double a[4][8]{};
     for (unsigned r = 0; r < 4; ++r)

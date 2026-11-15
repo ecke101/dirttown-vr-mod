@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include <clocale>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -33,6 +34,10 @@ void selfTest() {
     } cleanup{root};
     Paths dirs{root / "config", root / "cache", root / "logs", root / "bin", root / "legacy"};
     Config c;
+    require(!c.antialiasing && !Config::fromJson(Json::object()).antialiasing,
+            "antialiasing defaults off");
+    require(Config::fromJson({{"antialiasing", true}}).antialiasing,
+            "explicit antialiasing opt-in preserved");
     c.game = text(root / "Steam Library/steamapps/common/Dirt Town Demo");
     c.scale = 1;
     c.controllers = false;
@@ -98,7 +103,24 @@ void selfTest() {
 #endif
     c.antialiasing = false;
     c.graphics = "d3d11";
-    auto plan = makePlan(c, dirs, "launch");
+    auto plan = [&] {
+        struct NumericLocale {
+            std::string previous = std::setlocale(LC_NUMERIC, nullptr);
+            ~NumericLocale() {
+                std::setlocale(LC_NUMERIC, previous.c_str());
+            }
+        } numericLocale;
+        // Reproduce GTK's decimal-comma locale where installed. The same
+        // checks also run on hosts that only provide the default C locale.
+        for (const char* name : {"sv_SE.UTF-8", "sv_SE.utf8", "Swedish_Sweden.1252"})
+            if (std::setlocale(LC_NUMERIC, name))
+                break;
+        c.scale = .625;
+        require(c.scaleArgument() == "0.625", "locale-independent GUI scale argument");
+        return makePlan(c, dirs, "launch");
+    }();
+    require(plan.vars.at("DIRTTOWN_VR_RESOLUTION_SCALE") == "0.625",
+            "locale-independent injected scale");
     require(plan.vars.at("DIRTTOWN_VR_CONTROLLERS") == "0" &&
                 plan.vars.at("DIRTTOWN_VR_TAA") == "0" &&
                 plan.vars.at("DIRTTOWN_VR_GRAPHICS") == "d3d11",

@@ -7,7 +7,7 @@ struct GuiModel {
     Paths dirs;
     Config config;
     Json headset;
-    std::string status = "Start your OpenXR runtime and connect the headset.";
+    std::string status = "Connect your headset and start your OpenXR runtime, then launch VR.";
     std::unique_ptr<Process> pending;
     fs::path report;
     std::string action;
@@ -36,7 +36,7 @@ struct GuiModel {
                                          "--runtime",
                                          config.runtime,
                                          "--resolution-scale",
-                                         std::to_string(config.scale),
+                                         config.scaleArgument(),
                                          "--graphics",
                                          config.graphics};
         if (!config.controllers)
@@ -46,8 +46,12 @@ struct GuiModel {
         child->start(args, environment(), {}, dirs.logs / "gui-worker.log");
         pending = std::move(child);
         action = command;
-        status = command == "runtime" ? "Checking the headset..."
-                                      : "Running. Load a site on the monitor after the game opens.";
+        if (command == "runtime")
+            status = "Detecting your headset...";
+        else if (command == "launch")
+            status = "Starting Dirt Town. Load a site on your monitor to enter VR.";
+        else
+            status = "Test running. Close the test window when you're finished.";
     }
     bool poll() {
         if (!pending)
@@ -62,8 +66,9 @@ struct GuiModel {
         if (result.contains("error"))
             throw std::runtime_error(result["error"].get<std::string>());
         if (*code)
-            throw std::runtime_error("Exited with code " + std::to_string(*code) +
-                                     ". Details: " + text(dirs.logs / "gui-worker.log"));
+            throw std::runtime_error("The " + std::string(action == "launch" ? "game" : "test") +
+                                     " stopped (code " + std::to_string(*code) +
+                                     "). Open logs for details, then try again.");
         if (action == "runtime") {
             if (!result.contains("runtime"))
                 throw std::runtime_error("No headset result returned. See launcher logs.");
@@ -71,12 +76,18 @@ struct GuiModel {
             status = result.at("runtime").get<std::string>() + " | " +
                      result.at("headset").get<std::string>();
         } else
-            status = "Exited normally. Logs: " + text(dirs.logs);
+            status = "Session finished. You're ready to launch again.";
         return true;
     }
     std::string resolution(double scale) const {
         if (headset.empty())
-            return "Resolution follows the headset recommendation.";
+            return "Detect your headset to preview the per-eye resolution.";
+        const auto& eyes = headset.at("eyes");
+        if (eyes.at(0) == eyes.at(1))
+            return std::to_string((int)std::lround(eyes.at(0).at(0).get<double>() * scale)) +
+                   " x " +
+                   std::to_string((int)std::lround(eyes.at(0).at(1).get<double>() * scale)) +
+                   " pixels per eye";
         std::string result = "Per-eye target: ";
         for (size_t i = 0; i < 2; ++i) {
             if (i)

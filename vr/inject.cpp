@@ -58,14 +58,15 @@ std::unique_ptr<dtvr::XrInput> controllers;
 dtvr::SdlVirtualPad virtualPad;
 void* vrRenderer = nullptr;
 std::atomic<void*> pendingCommand{nullptr};
-bool enabled = true, anchored = false;
+bool enabled = true;
 bool vrRequested = true;
 bool controllersRequested = true;
 bool debugInput = false;
 float resolutionScale = 0.75f;
 ULONGLONG retryAfter = 0;
-XrPosef anchor{};
-bool f9Down = false, f10Down = false, f11Down = false, antialiasing = true;
+void* anchorWorld = nullptr;
+uint64_t anchorEntity = 0;
+bool f9Down = false, f10Down = false, f11Down = false, antialiasing = false;
 template <class T> T& at(void* p, size_t offset) {
     return *reinterpret_cast<T*>(static_cast<char*>(p) + offset);
 }
@@ -301,9 +302,10 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
     const bool toggle = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
     const bool toggleAA = (GetAsyncKeyState(VK_F11) & 0x8000) != 0;
     if (recenter && !f9Down)
-        anchored = false;
+        xr->trackingOrigin.reset();
     if (toggle && !f10Down) {
         enabled = !enabled;
+        xr->trackingOrigin.reset();
         transfer->resetHistory();
         log("VR enabled: %d", enabled);
     }
@@ -319,16 +321,26 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
     updateControllers(enabled && draw, world);
     if (xr->quit)
         throw std::runtime_error("Headset session ended; reconnecting");
-    if (!enabled || !draw) {
+    const uint64_t entity = at<uint64_t>(world, 0xeaa0);
+    if (anchorWorld != world || anchorEntity != entity) {
+        xr->trackingOrigin.reset();
+        anchorWorld = world;
+        anchorEntity = entity;
+    }
+    auto& origin = xr->trackingOrigin;
+    const auto previousGeneration = origin.generation;
+    if (!enabled || !draw ||
+        !origin.update(xr->head, xr->viewStateFlags, xr->frame.predictedDisplayTime)) {
+        origin.reset();
+        virtualPad.neutral();
         xr->endFrame(false);
         renderOriginal(renderer, cmd, world, camera, time, extra);
         return;
     }
-    if (!anchored) {
-        anchor = xr->head.pose;
-        anchored = true;
+    if (origin.generation != previousGeneration) {
         transfer->resetHistory();
-        log("Recentered headset at game camera");
+        log("Recentered headset at game camera: tracking origin=(%.3f %.3f %.3f)",
+            origin.pose.position.x, origin.pose.position.y, origin.pose.position.z);
     }
     if (vrRenderer != renderer || at<uint32_t>(renderer, 0x108) != xr->renderWidth ||
         at<uint32_t>(renderer, 0x10c) != xr->renderHeight) {
@@ -336,18 +348,16 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
         resizeOriginal(renderer, xr->renderWidth, xr->renderHeight, 1);
     }
     xr->acquire();
+    const auto& anchor = origin.pose;
     const auto& source = *static_cast<const GameCamera*>(camera);
     const auto gameRotation = gameOrientation(source.yaw, source.pitch);
-    const auto worldFromTracking = product(gameRotation, conjugate(anchor.orientation));
     for (unsigned i = 0; i < 2; ++i) {
         GameCamera eyeCamera = source;
-        auto p = xr->views[i].pose.position;
-        auto offset = rotate(worldFromTracking, {p.x - anchor.position.x, p.y - anchor.position.y,
-                                                 p.z - anchor.position.z});
-        eyeCamera.position[0] += offset.x;
-        eyeCamera.position[1] += offset.y;
-        eyeCamera.position[2] += offset.z;
-        auto orientation = product(worldFromTracking, xr->views[i].pose.orientation);
+        const auto eye = relativeEyePose(gameRotation, anchor, xr->views[i].pose);
+        eyeCamera.position[0] += eye.position.x;
+        eyeCamera.position[1] += eye.position.y;
+        eyeCamera.position[2] += eye.position.z;
+        const auto orientation = eye.orientation;
         auto forward = rotate(orientation, {0, 0, -1});
         eyeCamera.yaw = std::atan2(forward.x, -forward.z);
         eyeCamera.pitch = std::asin(std::clamp(forward.y, -1.f, 1.f));
@@ -381,9 +391,10 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
             auto* end = at<unsigned char*>(renderer, 0x8f0);
             const size_t mirrors =
                 (reinterpret_cast<uintptr_t>(end) - reinterpret_cast<uintptr_t>(first)) / 0x150;
-            log("VR View routing: eye=%u primary=%u auxiliary-preserved=%u mirrors=%zu position=(%.5f %.5f %.5f)",
+            log("VR View routing: eye=%u primary=%u auxiliary-preserved=%u mirrors=%zu position=(%.5f %.5f %.5f) tracking-offset=(%.3f %.3f %.3f)",
                 i, primaryViews, auxiliaryViews, mirrors, eyeCamera.position[0],
-                eyeCamera.position[1], eyeCamera.position[2]);
+                eyeCamera.position[1], eyeCamera.position[2], eye.position.x, eye.position.y,
+                eye.position.z);
         }
         void* container = at<void*>(renderer, 0x100);
 
@@ -431,10 +442,15 @@ void renderHook(void* renderer, void* cmd, void* world, const void* camera, floa
                 retryAfter = GetTickCount64() + 2000;
             }
             vrRenderer = nullptr;
-            anchored = false;
+            if (xr)
+                xr->trackingOrigin.reset();
             renderOriginal(renderer, cmd, world, camera, time, extra);
         }
     } else {
+        // Thumbnail/preview renderers can run alongside the playable scene.
+        // Only leaving the main renderer invalidates its tracking origin.
+        if (xr && !eyeActive && renderer == vrRenderer)
+            xr->trackingOrigin.reset();
         virtualPad.neutral();
         renderOriginal(renderer, cmd, world, camera, time, extra);
     }
@@ -500,7 +516,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI Initialize(LPVOID modulePointer) {
     }
     char setting[16]{};
     GetEnvironmentVariableA("DIRTTOWN_VR_TAA", setting, sizeof(setting));
-    antialiasing = std::strcmp(setting, "0") != 0;
+    antialiasing = std::strcmp(setting, "1") == 0;
     debugInput = GetEnvironmentVariableA("DIRTTOWN_VR_DEBUG_INPUT", setting, sizeof(setting)) > 0 &&
                  std::strcmp(setting, "1") == 0;
     bool ok = install(0x64ca00, reinterpret_cast<void*>(renderHook),

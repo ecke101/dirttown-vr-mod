@@ -16,8 +16,9 @@ struct Paths {
 struct Config {
     std::string game, proton, runtime, graphics = "auto";
     double scale = .75;
-    bool controllers = true, antialiasing = true;
+    bool controllers = true, antialiasing = false;
     Json json() const;
+    std::string scaleArgument() const;
     static Config fromJson(const Json& value);
     static Config load(const Paths& dirs);
     void save(const Paths& dirs) const;

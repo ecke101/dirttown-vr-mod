@@ -42,6 +42,15 @@ class NativeLauncherTests(unittest.TestCase):
     def test_option_values_are_not_parsed_as_commands(self):
         self.assertEqual(self.call('prepare','--game','self-test')['settings']['game'],'self-test')
 
+    def test_antialiasing_defaults_off_and_preserves_opt_in(self):
+        result=self.call('prepare')
+        self.assertFalse(result['settings']['antialiasing'])
+        config=Path(result['config'])/'config.json'
+        settings=json.loads(config.read_text(encoding='utf-8'))
+        settings['antialiasing']=True
+        config.write_text(json.dumps(settings),encoding='utf-8')
+        self.assertTrue(self.call('prepare')['settings']['antialiasing'])
+
     @unittest.skipIf(sys.platform=='win32','XDG directories are Linux-only')
     def test_invalid_xdg_directories_use_home_defaults(self):
         home=self.root/'home';home.mkdir()

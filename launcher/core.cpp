@@ -56,6 +56,11 @@ Json Config::json() const {
             {"controllers", controllers},
             {"antialiasing", antialiasing}};
 }
+std::string Config::scaleArgument() const {
+    // GTK sets the numeric locale. Worker arguments and the injected DLL's
+    // environment must still use a decimal point, regardless of that locale.
+    return Json(scale).dump();
+}
 Config Config::fromJson(const Json& j) {
     Config c;
     c.game = j.value("game", c.game);
@@ -288,7 +293,7 @@ Plan makePlan(const Config& config, const Paths& dirs, const std::string& comman
         if (!fs::is_regular_file(dirs.binaries / name))
             throw std::runtime_error("Missing " + name +
                                      ". Rebuild or download a complete launcher.");
-    p.vars["DIRTTOWN_VR_RESOLUTION_SCALE"] = std::to_string(config.scale);
+    p.vars["DIRTTOWN_VR_RESOLUTION_SCALE"] = config.scaleArgument();
     p.vars["DIRTTOWN_VR_CONTROLLERS"] = config.controllers ? "1" : "0";
     p.vars["DIRTTOWN_VR_TAA"] = config.antialiasing ? "1" : "0";
     p.vars["DIRTTOWN_VR_GRAPHICS"] = config.graphics;

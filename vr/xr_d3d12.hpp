@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "tracking_origin.hpp"
 
 namespace dtvr {
 using Microsoft::WRL::ComPtr;
@@ -98,6 +99,8 @@ class XrBridge {
     std::array<XrView, 2> views{{{XR_TYPE_VIEW}, {XR_TYPE_VIEW}}};
     XrFrameState frame{XR_TYPE_FRAME_STATE};
     XrSpaceLocation head{XR_TYPE_SPACE_LOCATION};
+    XrViewStateFlags viewStateFlags = 0;
+    TrackingOrigin trackingOrigin;
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     XrGraphicsRequirementsD3D12KHR requirements{XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR};
     bool useD3D11 = false;
@@ -315,6 +318,10 @@ class XrBridge {
             if (event.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
                 auto state = reinterpret_cast<XrEventDataSessionStateChanged*>(&event)->state;
                 std::printf("Session state: %d\n", (int)state);
+                if (state != XR_SESSION_STATE_VISIBLE && state != XR_SESSION_STATE_FOCUSED)
+                    trackingOrigin.reset();
+                if (state == XR_SESSION_STATE_FOCUSED && !focused)
+                    trackingOrigin.reset();
                 visible = state == XR_SESSION_STATE_VISIBLE || state == XR_SESSION_STATE_FOCUSED;
                 focused = state == XR_SESSION_STATE_FOCUSED;
                 if (state == XR_SESSION_STATE_READY && !running) {
@@ -328,6 +335,15 @@ class XrBridge {
                 } else if (state == XR_SESSION_STATE_EXITING ||
                            state == XR_SESSION_STATE_LOSS_PENDING)
                     quit = true;
+            } else if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING) {
+                const auto& change =
+                    *reinterpret_cast<XrEventDataReferenceSpaceChangePending*>(&event);
+                if (change.session == session &&
+                    change.referenceSpaceType == XR_REFERENCE_SPACE_TYPE_LOCAL) {
+                    trackingOrigin.spaceChangePending(change.changeTime);
+                    std::printf("Local tracking origin change scheduled at %lld\n",
+                                (long long)change.changeTime);
+                }
             } else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
                 quit = true;
             event = {XR_TYPE_EVENT_DATA_BUFFER};
@@ -354,9 +370,10 @@ class XrBridge {
                  "Locate headset eye views");
         check_xr(xrLocateSpace(headSpace, localSpace, frame.predictedDisplayTime, &head),
                  "Locate headset pose");
+        viewStateFlags = state.viewStateFlags;
         return frame.shouldRender && count == 2 &&
                (state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) &&
-               (state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT);
+               (state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) && validHeadPose(head);
     }
     void acquire() {
         for (auto& eye : eyes) {

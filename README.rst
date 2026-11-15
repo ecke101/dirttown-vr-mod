@@ -34,6 +34,9 @@ Controls
 --------
 
 * F9: recenter. F10: toggle VR. F11: toggle temporal antialiasing.
+  Antialiasing is off by default; enable it in the launcher or with F11.
+  The headset also recenters after tracking recovery, runtime origin changes,
+  loading a scene, entering/exiting a vehicle, and re-enabling VR.
 * Dozer: left stick drives/steers; right stick lifts/rolls the blade.
   Left/right triggers angle the blade left/right. Hold the left grip with the
   triggers to adjust forward/back pitch. Triggers do not drive the dozer.
