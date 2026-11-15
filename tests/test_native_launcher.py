@@ -45,6 +45,7 @@ class NativeLauncherTests(unittest.TestCase):
     def test_single_file_extracts_and_repairs_corrupt_cache(self):
         result=self.call('prepare');cache=Path(result['cache'])
         dll=cache/'bin/dirttown-vr.dll';expected=(self.bin/'dirttown-vr.dll').read_bytes()
+        self.assertTrue(dll.is_file(),f'{result!r}; extracted files: {list(self.root.rglob("*"))!r}')
         self.assertEqual(dll.read_bytes(),expected)
         dll.write_bytes(b'corrupt');self.call('prepare');self.assertEqual(dll.read_bytes(),expected)
         self.assertEqual((cache/'licenses/test.txt').read_text(),'fixture')
@@ -55,6 +56,7 @@ class NativeLauncherTests(unittest.TestCase):
         (legacy/'config.json').write_text(json.dumps(settings));(legacy/'controls.ini').write_text('[controls]\ndeadzone=0.2\n')
         result=self.call('prepare');config=Path(result['config'])
         self.assertEqual(result['settings']['scale'],1.0);self.assertFalse(result['settings']['controllers'])
+        self.assertTrue((config/'controls.ini').is_file(),f'{result!r}; extracted files: {list(self.root.rglob("*"))!r}')
         self.assertEqual((config/'controls.ini').read_text(),'[controls]\ndeadzone=0.2\n')
         (legacy/'config.json').write_text('{}');self.assertEqual(self.call('prepare')['settings']['scale'],1.0)
 
