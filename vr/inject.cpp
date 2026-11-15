@@ -277,7 +277,7 @@ void renderStereo(void* renderer,void* cmd,void* world,const void* camera,float 
         auto* resource=at<ID3D12Resource*>(texture,0x20);
         auto* list=at<ID3D12GraphicsCommandList*>(cmd,0x120);
         const auto usage=at<uint32_t>(container,8);
-        constexpr auto shaderResourceState=static_cast<D3D12_RESOURCE_STATES>(
+        const auto shaderResourceState=static_cast<D3D12_RESOURCE_STATES>(
             D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         auto state=(usage&1)?shaderResourceState:D3D12_RESOURCE_STATE_RENDER_TARGET;
         transfer->capture(i,list,resource,state);
