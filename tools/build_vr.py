@@ -14,6 +14,20 @@ SDK_SHA='93c800cfe3269a19683fe6fef51236c16a164c641a6903eff84c6b2816afe556'
 HOOK_URL='https://codeload.github.com/TsudaKageyu/minhook/zip/refs/tags/v1.3.4'
 HOOK_SHA='172708123daa0c98d20d3a980b16a50be14af243dc95dee6f79c24193ad010e4'
 
+def launcher_dependencies():
+    folder=ROOT/'.local/launcher-deps';folder.mkdir(parents=True,exist_ok=True)
+    sources={
+        'json.hpp':('https://github.com/nlohmann/json/releases/download/v3.12.0/json.hpp','aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63'),
+        'picosha2.h':('https://raw.githubusercontent.com/okdshin/PicoSHA2/v1.0.1/picosha2.h','b13c180161ffac8d0adc81e033e493c409457c4d1258ab9781ac80579ba3bdd8'),
+        'miniz-3.1.2.zip':('https://codeload.github.com/richgel999/miniz/zip/refs/tags/3.1.2','e7a0334927a069dc5aeb69616d371542a4376e1569290d7102b88c6f3992d6cb'),
+    }
+    for name,(url,checksum) in sources.items():
+        file=folder/name
+        if not file.exists():urllib.request.urlretrieve(url,file)
+        if hashlib.sha256(file.read_bytes()).hexdigest()!=checksum:raise RuntimeError('Dependency hash mismatch: '+name)
+    with zipfile.ZipFile(folder/'miniz-3.1.2.zip') as archive:archive.extractall(folder)
+    return folder
+
 def copy_dependency(source, target):
     """Keep identical loaded images intact; replace changed files by rename."""
     if not target.exists() or target.read_bytes()!=source.read_bytes():
@@ -40,6 +54,7 @@ def main():
         raise RuntimeError('MinHook source package hash mismatch')
     with zipfile.ZipFile(hook_package) as archive:archive.extractall(LOCAL)
     hook=LOCAL/'minhook-1.3.4'
+    launcher_deps=launcher_dependencies()
     trampoline=hook/'src/trampoline.c'
     source=trampoline.read_text()
     old='        if (hs.flags & F_ERROR)\n            return FALSE;'
@@ -52,18 +67,26 @@ def main():
     trampoline.write_text(source.replace(old,new))
     build=ROOT/'build'
     command=['cmake','-S',str(ROOT),'-B',str(build),'-DCMAKE_BUILD_TYPE=Release',
-             '-DOPENXR_INCLUDE='+str(sdk/'include'),'-DMINHOOK_DIR='+str(hook)]
+             '-DOPENXR_INCLUDE='+str(sdk/'include'),'-DMINHOOK_DIR='+str(hook),'-DLAUNCHER_DEPS='+str(launcher_deps)]
     if os.name!='nt':command+=['-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'tools/mingw.cmake'),'-G','Ninja']
     elif args.generator:command+=['-G',args.generator]
     if os.name=='nt':command+=['-A','x64'] if not args.generator or 'Visual Studio' in args.generator else []
     subprocess.run(command,check=True)
     subprocess.run(['cmake','--build',str(build),'--config','Release','--parallel','4'],check=True)
     output=LOCAL/'bin';output.mkdir(exist_ok=True)
-    for name in ('dirttown-vr.dll','vr-launch.exe','vr-probe.exe','temporal-test.exe','core-test.exe','eye-transfer-test.exe'):
+    for name in ('dirttown-vr.dll','vr-launch.exe','vr-probe.exe','temporal-test.exe','core-test.exe','eye-transfer-test.exe','dirttown-vr-launcher.exe'):
         source=build/'Release'/name if (build/'Release'/name).exists() else build/name
         copy_dependency(source,output/name)
     copy_dependency(sdk/'native/x64/release/bin/openxr_loader.dll',output/'openxr_loader.dll')
     shutil.copy2(hook/'LICENSE.txt',output/'MinHook-LICENSE.txt')
+    from bundle import bundle
+    bundle(output/'dirttown-vr-launcher.exe',output/'dirttown-vr.exe')
+    if os.name!='nt':
+        native=ROOT/'.local/launcher-build'
+        subprocess.run(['cmake','-S',str(ROOT),'-B',str(native),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release',
+                        '-DOPENXR_INCLUDE='+str(sdk/'include'),'-DLAUNCHER_DEPS='+str(launcher_deps)],check=True)
+        subprocess.run(['cmake','--build',str(native),'--parallel','4'],check=True)
+        bundle(native/'dirttown-vr-launcher',output/'dirttown-vr')
     print('Built',output)
 
 if __name__=='__main__':main()

@@ -8,12 +8,14 @@ modified. Menus and HUD remain on the monitor.
 Run
 ---
 
-Use Windows x64 or Linux x86-64 with Python 3.10+ and Tk. Start your PC OpenXR
-runtime and connect the headset before launching. Linux additionally requires
-Steam, a recent Proton with OpenXR support, and the native OpenXR loader.
+Run ``dirttown-vr.exe`` on Windows x64 or ``./dirttown-vr`` on Linux x86-64.
+No Python installation is needed for the mod. The launcher contains its VR
+DLL, helpers, default controls and licences, and extracts them to a private
+cache. Linux uses the system GTK 3 library and additionally requires Steam,
+Proton with OpenXR support, and the native OpenXR loader.
 
-Extract a release archive, then run ``run.bat`` on Windows or ``./run.sh`` on
-Linux. Select the game folder if it is not detected. Click **Detect headset**,
+Start your PC OpenXR runtime and connect the headset before launching.
+Select the game folder if it is not detected. Click **Detect headset**,
 choose a resolution percentage, then **Launch VR** and load a site on the
 monitor. Start at 50–75% if performance is poor. Preferences are remembered.
 
@@ -54,7 +56,7 @@ clicks and menu buttons. Simple controllers provide buttons only; use the
 keyboard/gamepad for driving. Devices with fewer buttons need keyboard
 fallbacks for actions without an equivalent input.
 
-**Controller settings…** opens ``.local/controls.ini``. Set deadzone, grip
+**Controller settings...** opens your saved ``controls.ini``. Set deadzone, grip
 threshold, hand swapping, axis inversion or per-profile OpenXR component
 bindings there. Restart the game after editing. Controller input is released
 when tracking input becomes inactive, VR loses focus, or updates go stale.
@@ -64,33 +66,42 @@ Command line
 
 From the extracted folder::
 
-    python -m dirttown_vr runtime
-    python -m dirttown_vr launch
-    python -m dirttown_vr --resolution-scale 0.5 --no-controllers launch
-    python -m dirttown_vr --runtime /path/to/runtime.json launch
-    python -m dirttown_vr probe
-    python -m dirttown_vr gpu-test
+    dirttown-vr runtime
+    dirttown-vr launch
+    dirttown-vr --resolution-scale 0.5 --no-controllers launch
+    dirttown-vr --runtime /path/to/runtime.json launch
+    dirttown-vr probe
+    dirttown-vr gpu-test
 
-Use ``python3`` on Linux. ``--game`` selects the game directory; ``--proton``
-selects a Linux Proton executable. ``--graphics d3d12`` or ``d3d11`` selects a
-graphics path. Logs are in ``.local/logs``. **Test headset** displays a tracked
-cube; it does not load the game.
+Use ``./dirttown-vr`` on Linux or ``dirttown-vr.exe`` on Windows. ``--game``
+selects the game directory; ``--proton`` selects a Linux Proton executable.
+``--graphics d3d12`` or ``d3d11`` selects a graphics path. **Open logs** opens
+the log folder. **Test headset** displays a tracked cube; it does not load
+the game. **Licences** opens the bundled dependency notices.
+
+Windows settings and logs are under ``%LOCALAPPDATA%/DirtTownVR``. Linux uses
+``$XDG_CONFIG_HOME/dirttown-vr-mod`` for settings and
+``$XDG_STATE_HOME/dirttown-vr-mod/logs`` for logs (defaulting to
+``~/.config`` and ``~/.local/state``). Existing development settings are
+imported from ``.local`` on the first run.
 
 Build and test
 --------------
 
-Source checkouts need a build before launching. Install CMake and either Visual
-Studio C++ tools on Windows or x86-64 MinGW-w64 plus Ninja on Linux::
+Python is needed only to build and test the source. Install Python 3.10+,
+CMake and either Visual Studio C++ tools on Windows or x86-64 MinGW-w64,
+GCC, Ninja and GTK 3 development headers on Linux::
 
     python tools/build_vr.py
     python -m unittest discover -s tests -v
-    python tools/package.py
+    .local/vr/bin/dirttown-vr self-test
 
-The builder downloads hash-verified OpenXR and MinHook dependencies. Release
-archives contain the compiled Windows binaries used natively or through Proton,
-the Python launcher and dependency licences. Packaging is manual; CI only
-builds and tests Windows and Linux targets. Hardware VR checks must be run on
-the target system.
+Use ``python3`` on Linux and ``.local/vr/bin/dirttown-vr.exe self-test`` on
+Windows. The builder downloads hash-verified dependencies and produces the
+bundled launchers in ``.local/vr/bin``. ``run.sh`` / ``run.bat`` start these
+development builds. Optional packaging is manual with
+``python tools/package.py --platform windows`` or ``--platform linux``;
+CI only builds and tests. Hardware VR checks must run on the target system.
 
 Validated hardware: Pico 4 through WiVRn/Proton on Linux. Windows runtimes and
 other controller/headset combinations are implemented but need physical tests.

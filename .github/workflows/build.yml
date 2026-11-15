@@ -4,7 +4,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-22.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -13,9 +13,15 @@ jobs:
           python-version: '3.12'
       - name: Install Linux cross compiler
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64 ninja-build
-      - run: python -m unittest discover -s tests -v
+        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64 ninja-build libgtk-3-dev
       - run: python tools/build_vr.py
+      - run: python -m unittest discover -s tests -v
+      - name: Run Linux launcher checks
+        if: runner.os == 'Linux'
+        run: .local/vr/bin/dirttown-vr self-test
       - name: Run core checks on Windows
         if: runner.os == 'Windows'
         run: .local/vr/bin/core-test.exe
+      - name: Run Windows launcher checks
+        if: runner.os == 'Windows'
+        run: .local/vr/bin/dirttown-vr.exe self-test

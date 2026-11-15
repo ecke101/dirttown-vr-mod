@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 cd -- "$(dirname -- "$0")"
-exec python3 -m dirttown_vr "$@"
+exec ./.local/vr/bin/dirttown-vr "$@"

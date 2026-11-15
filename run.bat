@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-py -3 -m dirttown_vr %*
+.local\vr\bin\dirttown-vr.exe %*
