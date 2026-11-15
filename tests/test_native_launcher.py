@@ -30,7 +30,7 @@ class NativeLauncherTests(unittest.TestCase):
 
     def call(self,*args,success=True):
         report=self.root/'report.json';report.unlink(missing_ok=True)
-        result=subprocess.run([str(self.app),*args,'--report',str(report)],env=self.env,capture_output=True,timeout=30)
+        result=subprocess.run([str(self.app),*args,'--report',str(report)],env=self.env,cwd=self.root,capture_output=True,timeout=30)
         if success:self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
         else:self.assertNotEqual(result.returncode,0)
         return json.loads(report.read_text(encoding='utf-8')) if report.exists() else result
@@ -41,6 +41,19 @@ class NativeLauncherTests(unittest.TestCase):
 
     def test_option_values_are_not_parsed_as_commands(self):
         self.assertEqual(self.call('prepare','--game','self-test')['settings']['game'],'self-test')
+
+    @unittest.skipIf(sys.platform=='win32','XDG directories are Linux-only')
+    def test_invalid_xdg_directories_use_home_defaults(self):
+        home=self.root/'home';home.mkdir()
+        self.env['HOME']=str(home)
+        for value in ('','relative-path'):
+            with self.subTest(value=value):
+                for name in ('XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_STATE_HOME'):
+                    self.env[name]=value
+                result=self.call('prepare')
+                self.assertEqual(Path(result['config']),home/'.config/dirttown-vr-mod')
+                self.assertEqual(Path(result['cache']).parent,home/'.cache/dirttown-vr-mod')
+                self.assertEqual(Path(result['logs']),home/'.local/state/dirttown-vr-mod/logs')
 
     def test_single_file_extracts_and_repairs_corrupt_cache(self):
         result=self.call('prepare');cache=Path(result['cache'])
