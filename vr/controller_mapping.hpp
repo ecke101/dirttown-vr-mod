@@ -18,10 +18,11 @@ struct PadState {
     std::array<int16_t,6> axes{{0,0,0,0,-32768,-32768}};
     std::array<bool,15> buttons{};
     uint64_t keys=0;
+    std::array<float,2> loaderAxes{};
+    bool directLoader=false;
 };
 struct ControllerSettings {
     float deadzone=.12f,gripThreshold=.55f;
-    unsigned loaderModifier=9; // SDL LB; 8 selects right-stick click, 15 selects none.
     bool swapHands=false,leftInvertX=false,leftInvertY=false,rightInvertX=false,rightInvertY=false;
 };
 inline float cleanAxis(float value) {return std::isfinite(value)?std::clamp(value,-1.f,1.f):0.f;}
@@ -53,12 +54,12 @@ inline PadState mapControllers(const ControllerInput& input,const ControllerSett
     // layer automatically, leaving the left drive stick completely separate.
     // Do not force LB in other machines: it reverses an excavator's left track.
     if(input.dozer && right.active)out.buttons[9]=true;
-    // LB selects the loader's implement layer and suppresses native stick look.
-    // Keep a custom implement modifier as well; a custom RS-click chord alone
-    // does not suppress camera input. Neither modifier is synthesized at rest.
-    if(input.loader && right.active && (out.axes[2] || out.axes[3])) {
-        out.buttons[9]=true;
-        if(settings.loaderModifier<15)out.buttons[settings.loaderModifier]=true;
+    // Feed the loader's native hydraulic channels separately. Exposing these
+    // axes as RS would also feed camera look and custom click-modifier bindings.
+    if(input.loader && right.active) {
+        out.directLoader=true;
+        out.loaderAxes={out.axes[3]/32767.f,-out.axes[2]/32767.f};
+        out.axes[2]=out.axes[3]=0;
     }
     // Hold the left stick click for the native d-pad blade angle/pitch controls.
     if(left.click && input.dozer) {
@@ -77,8 +78,13 @@ inline PadState mapControllers(const ControllerInput& input,const ControllerSett
         out.buttons[6]=true;out.buttons[8]=false;
         for(unsigned i=11;i<15;++i)out.buttons[i]=false;
         out.axes[2]=out.axes[3]=0;
+        out.loaderAxes={};
     }
     return out;
+}
+inline float loaderControl(const PadState& state,unsigned channel,unsigned device,float native) {
+    if(!state.directLoader || device!=1 || (channel!=4 && channel!=5))return native;
+    return std::clamp(native+state.loaderAxes[channel-4],-1.f,1.f);
 }
 inline bool freshControllerInput(uint64_t updated,uint64_t now) {
     return updated && now>=updated && now-updated<=250;
@@ -100,12 +106,16 @@ inline void verifyControllerMapping() {
     input.seated=false;pad=mapControllers(input);
     require(pad.axes[2]==32767 && pad.axes[3]==-32767 && !pad.buttons[9]);
     input.seated=input.loader=true;pad=mapControllers(input);
-    require(pad.buttons[9] && pad.axes[2]==32767 && pad.axes[3]==-32767);
-    ControllerSettings custom;custom.loaderModifier=8;pad=mapControllers(input,custom);
-    require(pad.buttons[8] && pad.buttons[9]);
+    require(pad.directLoader && pad.axes[2]==0 && pad.axes[3]==0 && !pad.buttons[8] && !pad.buttons[9]);
+    require(loaderControl(pad,4,1,0)==-1 && loaderControl(pad,5,1,0)==-1);
+    require(loaderControl(pad,4,0,.25f)==.25f && loaderControl(pad,4,2,.25f)==.25f);
+    require(loaderControl(pad,6,1,.25f)==.25f && loaderControl(PadState{},4,1,.25f)==.25f);
+    input.hands[1].x=.56f;pad=mapControllers(input);
+    require(std::abs(loaderControl(pad,5,1,0)+.5f)<.0001f);
     input.loader=false;
     input.seated=true;input.hands[1].x=input.hands[1].y=0;
-    input.loader=true;pad=mapControllers(input,custom);require(!pad.buttons[8] && !pad.buttons[9]);input.loader=false;
+    input.loader=true;pad=mapControllers(input);
+    require(!pad.buttons[8] && !pad.buttons[9] && pad.loaderAxes==std::array<float,2>{});input.loader=false;
     input.hands[0].secondary=true;require(mapControllers(input).keys==(uint64_t(1)<<9));
     input.hands[0].grip=1;require(mapControllers(input).keys==(uint64_t(1)<<28));
     input.hands[1].grip=1;input.hands[1].secondary=true;pad=mapControllers(input);
@@ -123,5 +133,7 @@ inline void verifyControllerMapping() {
     pad=mapControllers(input,settings);require(pad.axes[0]==0 && pad.axes[2]==-32767);
     input.hands[1].active=true;input.hands[0].click=input.hands[1].click=true;
     pad=mapControllers(input);require(pad.buttons[6] && !pad.buttons[8] && pad.axes[2]==0);
+    input.loader=true;input.hands[1].y=1;pad=mapControllers(input);
+    require(pad.buttons[6] && pad.loaderAxes==std::array<float,2>{});
 }
 } // namespace dtvr

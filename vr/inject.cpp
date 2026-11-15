@@ -44,12 +44,14 @@ using Resize=void(*)(void*,uint32_t,uint32_t,float);
 using Projection=void*(*)(void*,const void*,float,float);
 using Submit=bool(*)(void*);
 using Keyboard=const bool*(*)(int*);
+using Analog=float(*)(void*,uint8_t,uint8_t,uint8_t,void*);
 Render renderOriginal;
 Uniform vertexOriginal,fragmentOriginal;
 Resize resizeOriginal;
 Projection projectionOriginal;
 Submit submitOriginal;
 Keyboard keyboardOriginal;
+Analog analogOriginal;
 std::unique_ptr<dtvr::XrBridge> xr;
 std::unique_ptr<dtvr::EyeTransfer> transfer;
 std::unique_ptr<dtvr::XrInput> controllers;
@@ -78,6 +80,19 @@ const bool* keyboardHook(int* count) {
     std::copy(physical,physical+length,combined.begin());
     for(unsigned i=0;i<64 && i<(unsigned)length;++i)if(keys&(uint64_t(1)<<i))combined[i]=true;
     return combined.data();
+}
+float analogHook(void* input,uint8_t channel,uint8_t device,uint8_t context,void* source) {
+    const float native=analogOriginal(input,channel,device,context,source);
+    if(device!=1 || (channel!=4 && channel!=5))return native;
+    const auto state=virtualPad.snapshot();
+    const float result=dtvr::loaderControl(state,channel,device,native);
+    if(debugInput && state.directLoader && device==1 && (channel==4 || channel==5)) {
+        thread_local ULONGLONG previous=0;const auto now=GetTickCount64();
+        if(now-previous>=1000 && state.loaderAxes[channel-4]!=0) {
+            log("VR loader hydraulic: channel=%u context=%u native=%.3f routed=%.3f",channel,context,native,result);previous=now;
+        }
+    }
+    return result;
 }
 struct ControlContext {
     bool seated=false,dozer=false,loader=false,gradeHold=false,tiltLocked=false;
@@ -117,8 +132,8 @@ void updateControllers(bool active,void* world) {
         static uint64_t previousKeys=UINT64_MAX;static unsigned previousContext=UINT_MAX;
         const unsigned contextBits=context.seated|(context.dozer<<1)|(context.gradeHold<<2)|(context.tiltLocked<<3)|(context.loader<<4);
         const auto now=GetTickCount64();
-        if(contextBits!=previousContext)log("Control context: seated=%d dozer=%d loader=%d grade-hold=%d loader-modifier=%u",
-            context.seated,context.dozer,context.loader,context.gradeHold,controllers->settings.loaderModifier);
+        if(contextBits!=previousContext)log("Control context: seated=%d dozer=%d loader=%d grade-hold=%d",
+            context.seated,context.dozer,context.loader,context.gradeHold);
         uint32_t buttons=0;for(unsigned i=0;i<pad.buttons.size();++i)if(pad.buttons[i])buttons|=1u<<i;
         if(debugInput && (now-last>=1000 || buttons!=previousButtons || pad.keys!=previousKeys || contextBits!=previousContext)) {
             log("VR controls: focused=%d active=%d/%d axes=%d,%d,%d,%d,%d,%d buttons=%04x keys=%llx grip=%.2f/%.2f seated=%d dozer=%d grade-hold=%d tilt-lock=%d",
@@ -340,6 +355,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI Initialize(LPVOID modulePointer) {
     // Backend submission also catches SDL's submit-and-acquire-fence path.
     ok=install(0xe8e140,reinterpret_cast<void*>(submitHook),reinterpret_cast<void**>(&submitOriginal)) && ok;
     ok=install(0xd3d700,reinterpret_cast<void*>(keyboardHook),reinterpret_cast<void**>(&keyboardOriginal)) && ok;
+    ok=install(0x299cc0,reinterpret_cast<void*>(analogHook),reinterpret_cast<void**>(&analogOriginal)) && ok;
     if(!ok)return 1;
     vrRequested=GetEnvironmentVariableW(L"DIRTTOWN_VR_DIAGNOSTIC",nullptr,0)==0;
     char controllerSetting[8]{};

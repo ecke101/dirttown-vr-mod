@@ -10,7 +10,6 @@ import sys
 from .config import APP_ID,EXE_SHA,LOCAL,ROOT,Config,binary_dir,steam_roots,steam_libraries
 from .platform import is_game_running,launch_lock
 from .runtime import inspect_runtime,runtime_environment
-from .bindings import loader_modifier,profile_bindings
 
 
 def validate_game(game):
@@ -64,8 +63,6 @@ def make_plan(config, executable='game', diagnostic=False, platform=None, base_e
         if not (folder/name).is_file():raise RuntimeError('Missing '+name+'. Build the mod or use a complete release archive.')
     env.update(DIRTTOWN_VR_RESOLUTION_SCALE=str(config.scale),DIRTTOWN_VR_CONTROLLERS='1' if config.controllers else '0',
                DIRTTOWN_VR_TAA='1' if config.antialiasing else '0',DIRTTOWN_VR_GRAPHICS=config.graphics)
-    if config.controllers and executable=='game':
-        env['DIRTTOWN_VR_LOADER_MODIFIER']=loader_modifier(profile_bindings(game,platform,env))
     logs=LOCAL/'logs';logs.mkdir(parents=True,exist_ok=True)
     controls=LOCAL/'controls.ini'
     if not controls.exists():shutil.copy2(ROOT/'controls.example.ini',controls)
