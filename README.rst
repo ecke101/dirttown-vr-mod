@@ -102,7 +102,8 @@ Windows. The builder downloads hash-verified dependencies and produces the
 bundled launchers in ``.local/vr/bin``. ``run.sh`` / ``run.bat`` start these
 development builds. Optional packaging is manual with
 ``python tools/package.py --platform windows`` or ``--platform linux``;
-CI only builds and tests. Hardware VR checks must run on the target system.
+CI builds, tests and uploads packages for both platforms. Hardware VR checks
+must run on the target system.
 
 Validated hardware: Pico 4 through WiVRn/Proton on Linux. Windows runtimes and
 other controller/headset combinations are implemented but need physical tests.

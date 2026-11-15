@@ -25,3 +25,15 @@ jobs:
       - name: Run Windows launcher checks
         if: runner.os == 'Windows'
         run: .local/vr/bin/dirttown-vr.exe self-test
+      - name: Package Linux release
+        if: runner.os == 'Linux'
+        run: python tools/package.py --platform linux
+      - name: Package Windows release
+        if: runner.os == 'Windows'
+        run: python tools/package.py --platform windows
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dirttown-vr-mod-${{ runner.os }}
+          path: dist/*.zip
+          if-no-files-found: error
