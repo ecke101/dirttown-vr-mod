@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dirttown-vr-mod"
+version = "0.2.0"
+description = "OpenXR stereo and controller mod for Dirt Town Demo"
+requires-python = ">=3.10"
+readme = "README.rst"
+
+[project.gui-scripts]
+dirttown-vr = "dirttown_vr.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["dirttown_vr*"]
