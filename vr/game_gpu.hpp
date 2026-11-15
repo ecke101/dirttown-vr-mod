@@ -3,6 +3,7 @@
 #include <d3dcompiler.h>
 #include "temporal.hpp"
 #include "temporal_shader.hpp"
+#include "headset_hud.hpp"
 
 namespace dtvr {
 // Preserve all SDL graphics state: the game command list only copies the two
@@ -22,6 +23,7 @@ class EyeTransfer {
     uint32_t rtvStride = 0, srvStride = 0;
     std::array<uint32_t, 2> descriptorStart{};
     TemporalFilter temporal;
+    HeadsetHud hud;
 
   public:
     void setup(ID3D12CommandQueue* q, XrBridge& xr) {
@@ -42,11 +44,14 @@ class EyeTransfer {
         D3D12_DESCRIPTOR_RANGE range{};
         range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         range.NumDescriptors = 1;
-        D3D12_ROOT_PARAMETER parameter{};
-        parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        parameter.DescriptorTable.NumDescriptorRanges = 1;
-        parameter.DescriptorTable.pDescriptorRanges = &range;
-        parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        std::array<D3D12_ROOT_PARAMETER, 2> parameters{};
+        parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+        parameters[0].DescriptorTable.pDescriptorRanges = &range;
+        parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+        parameters[1].Constants.Num32BitValues = 20;
+        parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         D3D12_STATIC_SAMPLER_DESC sampler{};
         sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         sampler.AddressU = sampler.AddressV = sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -54,8 +59,8 @@ class EyeTransfer {
         sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         D3D12_ROOT_SIGNATURE_DESC signature{};
-        signature.NumParameters = 1;
-        signature.pParameters = &parameter;
+        signature.NumParameters = (UINT)parameters.size();
+        signature.pParameters = parameters.data();
         signature.NumStaticSamplers = 1;
         signature.pStaticSamplers = &sampler;
         ComPtr<ID3DBlob> blob, error;
@@ -98,7 +103,7 @@ float4 ps(Vertex v):SV_Target {return float4(image.SampleLevel(imageSampler,v.uv
                  "Create eye blit pipeline");
         D3D12_DESCRIPTOR_HEAP_DESC heap{};
         heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        heap.NumDescriptors = 2;
+        heap.NumDescriptors = 3;
         heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         check_hr(device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&srvHeap)),
                  "Create eye source descriptors");
@@ -121,6 +126,13 @@ float4 ps(Vertex v):SV_Target {return float4(image.SampleLevel(imageSampler,v.uv
         }
         temporal.setup(device.Get(), xr.renderWidth, xr.renderHeight, temporalShader,
                        sizeof(temporalShader) - 1);
+        hud.setup(device.Get(), xr.format, root.Get());
+        auto hudDescriptor = srvHeap->GetCPUDescriptorHandleForHeapStart();
+        hudDescriptor.ptr += 2 * srvStride;
+        device->CreateShaderResourceView(hud.image(), nullptr, hudDescriptor);
+    }
+    void showEyeDistance(float distance) {
+        hud.showEyeDistance(distance);
     }
     void setAntialiasing(bool enabled) {
         temporal.setEnabled(enabled);
@@ -182,6 +194,7 @@ float4 ps(Vertex v):SV_Target {return float4(image.SampleLevel(imageSampler,v.uv
     void submit(XrBridge& xr) {
         check_hr(allocator->Reset(), "Reset eye allocator");
         check_hr(commands->Reset(allocator.Get(), pipeline.Get()), "Reset eye commands");
+        hud.uploadIfChanged(commands.Get());
         for (unsigned i = 0; i < 2; ++i) {
             auto resolved = temporal.resolve(i, commands.Get(), copies[i].Get());
             auto destination = srvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -209,6 +222,9 @@ float4 ps(Vertex v):SV_Target {return float4(image.SampleLevel(imageSampler,v.uv
             commands->RSSetViewports(1, &viewport);
             commands->RSSetScissorRects(1, &scissor);
             commands->DrawInstanced(3, 1, 0, 0);
+            auto hudDescriptor = srvHeap->GetGPUDescriptorHandleForHeapStart();
+            hudDescriptor.ptr += 2 * srvStride;
+            hud.draw(commands.Get(), hudDescriptor, xr.views[i], xr.head.pose);
             barrier =
                 transition(image, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON);
             commands->ResourceBarrier(1, &barrier);

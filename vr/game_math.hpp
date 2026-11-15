@@ -19,6 +19,21 @@ inline XrQuaternionf gameOrientation(float yaw, float pitch) {
     return product({0, -std::sin(yaw / 2), 0, std::cos(yaw / 2)},
                    {std::sin(pitch / 2), 0, 0, std::cos(pitch / 2)});
 }
+inline XrPosef scaledEyePose(const XrPosef& eye, const XrPosef& head, float distance) {
+    if (distance == 1.f)
+        return eye;
+    XrPosef scaled = eye;
+    scaled.position = {head.position.x + (eye.position.x - head.position.x) * distance,
+                       head.position.y + (eye.position.y - head.position.y) * distance,
+                       head.position.z + (eye.position.z - head.position.z) * distance};
+    return scaled;
+}
+inline XrPosef eyeInHeadSpace(const XrPosef& eye, const XrPosef& head) {
+    const auto rotation = conjugate(head.orientation);
+    return {product(rotation, eye.orientation),
+            rotate(rotation, {eye.position.x - head.position.x, eye.position.y - head.position.y,
+                              eye.position.z - head.position.z})};
+}
 // Position is relative to the native game camera, whose world coordinates are
 // doubles. Keep only the small tracking displacement in float precision.
 inline XrPosef relativeEyePose(XrQuaternionf gameRotation, const XrPosef& anchor,

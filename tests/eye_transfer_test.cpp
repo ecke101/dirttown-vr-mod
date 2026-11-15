@@ -18,6 +18,12 @@ int main(int argc, char**) {
         xr.format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
         xr.renderWidth = 48;
         xr.renderHeight = 40;
+        xr.head.pose.orientation.w = 1;
+        for (unsigned i = 0; i < 2; ++i) {
+            xr.views[i].pose.orientation.w = 1;
+            xr.views[i].pose.position.x = i ? .034f : -.034f;
+            xr.views[i].fov = {-.8f, .8f, .8f, -.8f};
+        }
         if (xr.useD3D11)
             xr.createD3D11Interop(device.Get(), queue.Get());
         std::array<ComPtr<ID3D12Resource>, 2> targets;
@@ -93,6 +99,7 @@ int main(int argc, char**) {
         check_hr(commands->Close(), "Close clear commands");
         ID3D12CommandList* lists[] = {commands.Get()};
         queue->ExecuteCommandLists(1, lists);
+        transfer.showEyeDistance(1.2f);
         transfer.submit(xr);
         if (xr.useD3D11)
             xr.copyD3D11Eyes();
@@ -104,6 +111,14 @@ int main(int argc, char**) {
         for (unsigned i = 0; i < 2; ++i) {
             const auto& eye = xr.eyes[i];
             unsigned char pixel[4]{};
+            unsigned char hudPixel[4]{};
+            const auto hudProjection = headsetHudProjection(xr.views[i], xr.head.pose);
+            auto clip = [&](unsigned row) {
+                return hudProjection[4 + row] * hudY + hudProjection[8 + row] * hudZ +
+                       hudProjection[12 + row];
+            };
+            const unsigned hudX = (unsigned)((clip(0) / clip(3) * .5f + .5f) * eye.width);
+            const unsigned hudYpixel = (unsigned)((.5f - clip(1) / clip(3) * .5f) * eye.height);
             if (xr.useD3D11) {
                 D3D11_TEXTURE2D_DESC desc{};
                 targets11[i]->GetDesc(&desc);
@@ -120,6 +135,10 @@ int main(int argc, char**) {
                 std::memcpy(pixel,
                             static_cast<unsigned char*>(mapped.pData) +
                                 mapped.RowPitch * (eye.height / 2) + 4 * (eye.width / 2),
+                            4);
+                std::memcpy(hudPixel,
+                            static_cast<unsigned char*>(mapped.pData) +
+                                mapped.RowPitch * hudYpixel + 4 * hudX,
                             4);
                 xr.context11->Unmap(staging.Get(), 0);
             } else {
@@ -169,15 +188,23 @@ int main(int argc, char**) {
                                 footprint.Footprint.RowPitch * (eye.height / 2) +
                                 4 * (eye.width / 2),
                             4);
+                std::memcpy(hudPixel,
+                            static_cast<unsigned char*>(mapped) +
+                                footprint.Footprint.RowPitch * hudYpixel + 4 * hudX,
+                            4);
                 readback->Unmap(0, nullptr);
             }
             std::printf("Eye %u: %ux%u pixel %u,%u,%u,%u\n", i, eye.width, eye.height, pixel[0],
                         pixel[1], pixel[2], pixel[3]);
             if (pixel[0] < 250 || pixel[1] > 2 || pixel[2] > 2 || pixel[3] < 250)
                 throw std::runtime_error("Eye transfer pixel mismatch");
+            std::printf("Eye %u notification: pixel %u,%u,%u,%u\n", i, hudPixel[0], hudPixel[1],
+                        hudPixel[2], hudPixel[3]);
+            if (hudPixel[1] < 10 || hudPixel[3] < 250)
+                throw std::runtime_error("Headset notification missing from eye image");
         }
         CloseHandle(event);
-        std::printf("PASS: asymmetric eye transfer via %s\n",
+        std::printf("PASS: asymmetric eye transfer and stereo notification via %s\n",
                     xr.useD3D11 ? (xr.on12 ? "D3D11On12" : "D3D11 shared textures") : "D3D12");
         return 0;
     } catch (const std::exception& e) {

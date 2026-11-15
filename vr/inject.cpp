@@ -22,6 +22,7 @@
 #define DT_CALLER __builtin_return_address(0)
 #endif
 #include "game_math.hpp"
+#include "eye_distance.hpp"
 #include "game_gpu.hpp"
 #include "xr_input.hpp"
 #include "sdl_virtual_pad.hpp"
@@ -66,7 +67,8 @@ float resolutionScale = 0.75f;
 ULONGLONG retryAfter = 0;
 void* anchorWorld = nullptr;
 uint64_t anchorEntity = 0;
-bool f9Down = false, f10Down = false, f11Down = false, antialiasing = false;
+dtvr::VrHotkeys hotkeys;
+bool antialiasing = false;
 template <class T> T& at(void* p, size_t offset) {
     return *reinterpret_cast<T*>(static_cast<char*>(p) + offset);
 }
@@ -298,25 +300,29 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
                 log("VR controller setup error: %s", e.what());
             }
     }
-    const bool recenter = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
-    const bool toggle = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
-    const bool toggleAA = (GetAsyncKeyState(VK_F11) & 0x8000) != 0;
-    if (recenter && !f9Down)
+    const auto keys = hotkeys.update(
+        (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0, (GetAsyncKeyState(VK_F9) & 0x8000) != 0,
+        (GetAsyncKeyState(VK_F10) & 0x8000) != 0, (GetAsyncKeyState(VK_F11) & 0x8000) != 0);
+    if (keys.recenter)
         xr->trackingOrigin.reset();
-    if (toggle && !f10Down) {
+    if (keys.toggleVr) {
         enabled = !enabled;
         xr->trackingOrigin.reset();
         transfer->resetHistory();
         log("VR enabled: %d", enabled);
     }
-    if (toggleAA && !f11Down) {
+    if (keys.toggleAA) {
         antialiasing = !antialiasing;
         log("Temporal antialiasing enabled: %d", antialiasing);
     }
+    if (keys.showEyeDistance) {
+        transfer->showEyeDistance(hotkeys.eyeDistance());
+        if (keys.eyeDistanceChanged) {
+            transfer->resetHistory();
+            log("Eye distance: %.2fx OpenXR eye spacing", hotkeys.eyeDistance());
+        }
+    }
     transfer->setAntialiasing(antialiasing);
-    f9Down = recenter;
-    f10Down = toggle;
-    f11Down = toggleAA;
     bool draw = xr->beginFrame();
     updateControllers(enabled && draw, world);
     if (xr->quit)
@@ -353,7 +359,8 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
     const auto gameRotation = gameOrientation(source.yaw, source.pitch);
     for (unsigned i = 0; i < 2; ++i) {
         GameCamera eyeCamera = source;
-        const auto eye = relativeEyePose(gameRotation, anchor, xr->views[i].pose);
+        const auto scaled = scaledEyePose(xr->views[i].pose, xr->head.pose, hotkeys.eyeDistance());
+        const auto eye = relativeEyePose(gameRotation, anchor, scaled);
         eyeCamera.position[0] += eye.position.x;
         eyeCamera.position[1] += eye.position.y;
         eyeCamera.position[2] += eye.position.z;

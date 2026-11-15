@@ -3,7 +3,7 @@ Dirt Town VR Mod
 
 OpenXR stereo, head tracking, temporal antialiasing and controller support for
 Dirt Town Demo, Steam app 5471710, build 26658761. Game files and saves are not
-modified. Menus and HUD remain on the monitor.
+modified. Game menus and HUD remain on the monitor.
 
 Run
 ---
@@ -37,6 +37,10 @@ Controls
   Antialiasing is off by default; enable it in the launcher or with F11.
   The headset also recenters after tracking recovery, runtime origin changes,
   loading a scene, entering/exiting a vehicle, and re-enabling VR.
+* Shift+F9 / Shift+F10: decrease / increase eye distance in 0.1x steps, from
+  0.5x to 2x. A label in the headset shows the value for four seconds.
+  1x uses the eye spacing reported by OpenXR. Only eye separation changes;
+  leaning and camera orbit keep their normal movement. Resets to 1x on restart.
 * Dozer: left stick drives/steers; right stick lifts/rolls the blade.
   Left/right triggers angle the blade left/right. Hold the left grip with the
   triggers to adjust forward/back pitch. Triggers do not drive the dozer.

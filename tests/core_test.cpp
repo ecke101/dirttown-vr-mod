@@ -1,5 +1,7 @@
 #include "game_math.hpp"
 #include "controller_mapping.hpp"
+#include "eye_distance.hpp"
+#include "headset_hud.hpp"
 #include <cstdio>
 #include <limits>
 
@@ -105,6 +107,92 @@ void verifyTrackingOrigin() {
     head.pose.orientation = {0, 0, 0, 0};
     require(!origin.update(head, trackedEyes, 45), "Invalid origin orientation accepted");
 }
+
+void verifyEyeDistance() {
+    using namespace dtvr;
+    VrHotkeys keys;
+    require(keys.eyeDistance() == 1.f, "Eye distance does not default to OpenXR spacing");
+    auto event = keys.update(true, false, true, false);
+    require(event.eyeDistanceChanged && event.showEyeDistance && !event.toggleVr &&
+                !event.recenter && std::abs(keys.eyeDistance() - 1.1f) < 1e-6f,
+            "Shift+F10 changed VR state instead of eye distance");
+    event = keys.update(false, false, true, false);
+    require(!event.toggleVr && !event.eyeDistanceChanged,
+            "Releasing Shift while holding F10 toggled VR");
+    keys.update(false, false, false, false);
+    event = keys.update(false, false, true, false);
+    require(event.toggleVr && !event.showEyeDistance, "Unmodified F10 stopped toggling VR");
+    for (int i = 0; i < 30; ++i) {
+        keys.update(false, false, false, false);
+        event = keys.update(true, true, false, false);
+        require(!event.recenter && !event.toggleVr,
+                "Scale decrease triggered recenter or VR toggle");
+    }
+    require(keys.eyeDistance() == .5f && event.showEyeDistance && !event.eyeDistanceChanged,
+            "Eye distance did not clamp at 0.5x");
+    for (int i = 0; i < 30; ++i) {
+        keys.update(false, false, false, false);
+        keys.update(true, false, true, false);
+    }
+    require(keys.eyeDistance() == 2.f, "Eye distance did not clamp at 2x");
+    keys.update(false, false, false, false);
+    event = keys.update(true, true, true, false);
+    require(!event.eyeDistanceChanged && !event.toggleVr && !event.recenter,
+            "Simultaneous scale keys changed the distance or VR state");
+    keys.update(false, false, false, false);
+    event = keys.update(false, true, false, true);
+    require(event.recenter && event.toggleAA && !event.showEyeDistance,
+            "Unmodified recenter/antialiasing keys stopped working");
+
+    XrPosef anchor{gameOrientation(.7f, -.2f), {3.5f, 1.6f, -4.f}};
+    XrPosef head = anchor;
+    head.position.x += .25f;
+    head.position.y += .1f;
+    head.orientation = gameOrientation(-.4f, .3f);
+    for (float yaw : {-2.f, 0.f, 2.f})
+        for (float scale : {.5f, 1.f, 2.f}) {
+            const auto game = gameOrientation(yaw, .1f);
+            const auto expectedCenter = relativeEyePose(game, anchor, head).position;
+            std::array<XrVector3f, 2> positions;
+            for (unsigned i = 0; i < 2; ++i) {
+                XrPosef eye = head;
+                // Include rotated and asymmetric eye components, not a fixed X offset.
+                const auto baseline = rotate(head.orientation, {i ? .034f : -.034f, 0, 0});
+                eye.position.x += baseline.x;
+                eye.position.y += baseline.y;
+                eye.position.z += baseline.z;
+                const auto scaled = scaledEyePose(eye, head, scale);
+                require(std::memcmp(&eye.orientation, &scaled.orientation,
+                                    sizeof(eye.orientation)) == 0,
+                        "Eye distance changed the runtime eye orientation");
+                if (scale == 1.f)
+                    require(std::memcmp(&eye, &scaled, sizeof(eye)) == 0,
+                            "1x did not preserve the exact OpenXR eye pose");
+                positions[i] = relativeEyePose(game, anchor, scaled).position;
+            }
+            const XrVector3f center{(positions[0].x + positions[1].x) / 2,
+                                    (positions[0].y + positions[1].y) / 2,
+                                    (positions[0].z + positions[1].z) / 2};
+            require(std::abs(center.x - expectedCenter.x) + std::abs(center.y - expectedCenter.y) +
+                            std::abs(center.z - expectedCenter.z) <
+                        1e-5f,
+                    "Eye-distance effect scaled leaning or introduced an orbit radius");
+            const XrVector3f delta{positions[1].x - positions[0].x, positions[1].y - positions[0].y,
+                                   positions[1].z - positions[0].z};
+            require(std::abs(std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z) -
+                             .068f * scale) < 1e-5f,
+                    "Eye separation did not scale from the runtime baseline");
+        }
+    const auto label = eyeDistanceHudImage(1.2f);
+    const auto other = eyeDistanceHudImage(.5f);
+    require(label != other && label[0] == (label[0] & 0x00ffffff) &&
+                (label[(hudHeight / 2) * hudWidth + hudWidth / 2] >> 24) == 235,
+            "Headset scale label did not render its value and rounded panel");
+    unsigned letters = 0;
+    for (auto pixel : label)
+        letters += (pixel & 255) > 100;
+    require(letters > 200, "Headset scale label has no readable text");
+}
 } // namespace
 
 int main() {
@@ -112,8 +200,9 @@ int main() {
         dtvr::verifyCameraMath();
         dtvr::verifyControllerMapping();
         verifyTrackingOrigin();
+        verifyEyeDistance();
         std::puts(
-            "PASS: eye projection/culling, view routing, tracking origin recovery, controller mapping and input isolation");
+            "PASS: eye projection/culling, tracking origin recovery, eye-distance controls/HUD, view routing and controller mapping");
         return 0;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "FAIL: %s\n", e.what());
