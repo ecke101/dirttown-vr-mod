@@ -277,12 +277,14 @@ void renderStereo(void* renderer,void* cmd,void* world,const void* camera,float 
         auto* resource=at<ID3D12Resource*>(texture,0x20);
         auto* list=at<ID3D12GraphicsCommandList*>(cmd,0x120);
         const auto usage=at<uint32_t>(container,8);
-        auto state=(usage&1)?D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_RENDER_TARGET;
+        constexpr auto shaderResourceState=static_cast<D3D12_RESOURCE_STATES>(
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE|D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        auto state=(usage&1)?shaderResourceState:D3D12_RESOURCE_STATE_RENDER_TARGET;
         transfer->capture(i,list,resource,state);
         void* normalContainer=at<void*>(renderer,0x9f0);
         auto* normals=at<ID3D12Resource*>(at<void*>(normalContainer,0x28),0x20);
         const auto normalUsage=at<uint32_t>(normalContainer,8);
-        auto normalState=(normalUsage&1)?D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE:D3D12_RESOURCE_STATE_RENDER_TARGET;
+        auto normalState=(normalUsage&1)?shaderResourceState:D3D12_RESOURCE_STATE_RENDER_TARGET;
         transfer->captureDepth(i,list,normals,normalState);
     }
     pendingCommand.store(cmd);
