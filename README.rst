@@ -88,9 +88,10 @@ imported from ``.local`` on the first run.
 Build and test
 --------------
 
-Python is needed only to build and test the source. Install Python 3.10+,
-CMake and either Visual Studio C++ tools on Windows or x86-64 MinGW-w64,
-GCC, Ninja and GTK 3 development headers on Linux::
+Python is needed only to build and test the source. Install Python 3.10+
+and CMake. Windows builds use Visual Studio C++ tools. Linux builds also
+need GCC, Ninja, GTK 3 development headers and x86-64 MinGW-w64 with POSIX
+thread support::
 
     python tools/build_vr.py
     python -m unittest discover -s tests -v
