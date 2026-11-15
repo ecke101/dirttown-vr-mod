@@ -33,6 +33,8 @@ Controls
 
 * F9: recenter. F10: toggle VR. F11: toggle temporal antialiasing.
 * Dozer: left stick drives/steers; right stick lifts/rolls the blade.
+  Left/right triggers angle the blade left/right. Hold the left grip with the
+  triggers to adjust forward/back pitch. Triggers do not drive the dozer.
 * Walking: left stick moves; right stick turns/looks. Head tracking also works.
 * Wheel loaders: right stick lifts/curls the bucket with analog control,
   independently of camera input and desktop gamepad bindings.

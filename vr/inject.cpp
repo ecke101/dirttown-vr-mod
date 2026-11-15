@@ -83,13 +83,16 @@ const bool* keyboardHook(int* count) {
 }
 float analogHook(void* input,uint8_t channel,uint8_t device,uint8_t context,void* source) {
     const float native=analogOriginal(input,channel,device,context,source);
-    if(device!=1 || (channel!=4 && channel!=5))return native;
+    if(device!=1 || channel<4 || channel>7)return native;
     const auto state=virtualPad.snapshot();
-    const float result=dtvr::loaderControl(state,channel,device,native);
-    if(debugInput && state.directLoader && device==1 && (channel==4 || channel==5)) {
+    const float result=dtvr::hydraulicControl(state,channel,device,native);
+    const bool loader=state.directLoader && (channel==4 || channel==5);
+    const bool dozer=state.directDozer && (channel==6 || channel==7);
+    if(debugInput && (loader || dozer)) {
         thread_local ULONGLONG previous=0;const auto now=GetTickCount64();
-        if(now-previous>=1000 && state.loaderAxes[channel-4]!=0) {
-            log("VR loader hydraulic: channel=%u context=%u native=%.3f routed=%.3f",channel,context,native,result);previous=now;
+        const float axis=loader?state.loaderAxes[channel-4]:state.dozerAxes[channel-6];
+        if(now-previous>=1000 && axis!=0) {
+            log("VR %s hydraulic: channel=%u context=%u native=%.3f routed=%.3f",loader?"loader":"dozer",channel,context,native,result);previous=now;
         }
     }
     return result;
