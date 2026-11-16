@@ -2,6 +2,7 @@
 #include "controller_mapping.hpp"
 #include "eye_distance.hpp"
 #include "headset_hud.hpp"
+#include "game_builds.hpp"
 #include <cstdio>
 #include <limits>
 
@@ -9,6 +10,27 @@ namespace {
 void require(bool condition, const char* message) {
     if (!condition)
         throw std::runtime_error(message);
+}
+void verifyGameBuilds() {
+    using namespace dtvr;
+    require(gameBuilds.size() == 2, "Missing supported game build");
+    for (const auto& build : gameBuilds) {
+        require(findGameBuild(build.sha256) == &build &&
+                    build.matchesImage(build.imageSize, build.timestamp) &&
+                    !build.matchesImage(build.imageSize, build.timestamp + 1) &&
+                    !build.matchesImage(build.imageSize + 0x1000, build.timestamp),
+                "Game build fingerprint/image checks failed");
+        const auto& h = build.hooks;
+        for (auto rva : {h.render, h.vertex, h.fragment, h.projection, h.resize, h.submit,
+                         h.keyboard, h.analog, build.onFoot, build.findLoader, build.findDozer,
+                         build.sdlApiTable, build.playCallers[0], build.playCallers[1]})
+            require(rva >= 0x1000 && rva < build.imageSize,
+                    "Game build profile has an address outside the image");
+    }
+    require(gameBuilds[0].hooks.render != gameBuilds[1].hooks.render &&
+                gameBuilds[0].sdlApiTable != gameBuilds[1].sdlApiTable &&
+                gameBuilds[0].playCallers != gameBuilds[1].playCallers,
+            "Updated build reused the original render/input addresses");
 }
 void verifyTrackingOrigin() {
     using namespace dtvr;
@@ -201,6 +223,7 @@ int main() {
         dtvr::verifyControllerMapping();
         verifyTrackingOrigin();
         verifyEyeDistance();
+        verifyGameBuilds();
         std::puts(
             "PASS: eye projection/culling, tracking origin recovery, eye-distance controls/HUD, view routing and controller mapping");
         return 0;

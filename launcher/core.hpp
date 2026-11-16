@@ -4,8 +4,6 @@
 namespace launcher {
 using Json = nlohmann::json;
 inline constexpr const char* appId = "5471710";
-inline constexpr const char* gameHash =
-    "4f830861d4be3afd43cf45b2056a48afc716118efec2f3b28380766f8b9cc97f";
 std::string readFile(const fs::path& file);
 void writeFile(const fs::path& file, const std::string& data);
 std::string sha256(const std::string& data);

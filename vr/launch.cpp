@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <cwchar>
 
 static HANDLE child = nullptr;
 static void require(bool ok, const char* message) {
@@ -30,8 +31,9 @@ int wmain(int argc, wchar_t** argv) {
     report += L"/vr-launch.log";
     _wfreopen(report.c_str(), L"w", stderr);
     setvbuf(stderr, nullptr, _IONBF, 0);
-    if (argc != 3) {
-        std::fprintf(stderr, "Usage: vr-launch.exe GAME_EXE INJECTOR_DLL\n");
+    const bool verifyHooks = argc == 4 && std::wcscmp(argv[3], L"--verify-hooks") == 0;
+    if (argc != 3 && !verifyHooks) {
+        std::fprintf(stderr, "Usage: vr-launch.exe GAME_EXE INJECTOR_DLL [--verify-hooks]\n");
         return 2;
     }
     std::wstring game = argv[1], dll = argv[2];
@@ -96,6 +98,19 @@ int wmain(int argc, wchar_t** argv) {
     if (result) {
         TerminateProcess(process.hProcess, 1);
         require(false, "Render hook initialization failed; see inject.log");
+    }
+    if (verifyHooks) {
+        // Verify exact-build selection and every MinHook trampoline while the
+        // newly created game's main thread is still suspended. No game logic,
+        // save loading, rendering or OpenXR session is started by this check.
+        require(TerminateProcess(process.hProcess, 0), "Close hook verification process");
+        require(WaitForSingleObject(process.hProcess, 5000) == WAIT_OBJECT_0,
+                "Wait for hook verification process");
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        child = nullptr;
+        std::printf("PASS: VR hooks verified without starting the game main thread.\n");
+        return 0;
     }
     ResumeThread(process.hThread);
     CloseHandle(process.hThread);

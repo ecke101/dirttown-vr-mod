@@ -2,8 +2,8 @@ Dirt Town VR Mod
 ================
 
 OpenXR stereo, head tracking, temporal antialiasing and controller support for
-Dirt Town Demo, Steam app 5471710, build 26658761. Game files and saves are not
-modified. Game menus and HUD remain on the monitor.
+Dirt Town Demo, Steam app 5471710, builds 26658761 and 26690600. Game files and
+saves are not modified. Game menus and HUD remain on the monitor.
 
 Run
 ---

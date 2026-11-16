@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "../vr/game_builds.hpp"
 #include <clocale>
 #include <cmath>
 #include <fstream>
@@ -34,6 +35,20 @@ void selfTest() {
     } cleanup{root};
     Paths dirs{root / "config", root / "cache", root / "logs", root / "bin", root / "legacy"};
     Config c;
+    const auto* original =
+        dtvr::findGameBuild("4f830861d4be3afd43cf45b2056a48afc716118efec2f3b28380766f8b9cc97f");
+    const auto* updated =
+        dtvr::findGameBuild("d8fddd701778b9c4e19ffeedc68243d49bac983c87e6900cc6d14f6997c0e898");
+    require(original && original->steamBuild == 26658761 && updated &&
+                updated->steamBuild == 26690600,
+            "exact executable fingerprints select both supported builds");
+    require(original->matchesImage(0x1e4d000, 0x6af7b17f) &&
+                updated->matchesImage(0x1e4e000, 0x6afa43c9) &&
+                !updated->matchesImage(original->imageSize, original->timestamp) &&
+                !original->matchesImage(updated->imageSize, updated->timestamp),
+            "mixed executable/address profiles are rejected");
+    require(!dtvr::findGameBuild("") && !dtvr::findGameBuild(std::string(64, '0')),
+            "unknown executables are rejected");
     require(!c.antialiasing && !Config::fromJson(Json::object()).antialiasing,
             "antialiasing defaults off");
     require(Config::fromJson({{"antialiasing", true}}).antialiasing,

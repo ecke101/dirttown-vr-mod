@@ -24,6 +24,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/temporal_shader.hpp" "#pragma once\nstat
 add_library(minhook STATIC "${MINHOOK_DIR}/src/buffer.c" "${MINHOOK_DIR}/src/hook.c"
   "${MINHOOK_DIR}/src/trampoline.c" "${MINHOOK_DIR}/src/hde/hde64.c")
 add_library(dirttown-vr SHARED vr/inject.cpp)
+target_include_directories(dirttown-vr PRIVATE "${LAUNCHER_DEPS}")
 set_target_properties(dirttown-vr PROPERTIES PREFIX "")
 target_link_libraries(dirttown-vr PRIVATE minhook d3d12 d3d11 dxgi d3dcompiler dxguid gdi32)
 add_executable(vr-launch vr/launch.cpp)

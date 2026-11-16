@@ -30,8 +30,8 @@ class SdlVirtualPad {
     void* joystick = nullptr;
     bool (*setAxis)(void*, int, int16_t) = nullptr;
     bool (*setButton)(void*, int, bool) = nullptr;
-    template <class T> static T api(uintptr_t base, size_t slot) {
-        return *reinterpret_cast<T*>(base + 0x146f280 + slot * 8);
+    template <class T> static T api(uintptr_t table, size_t slot) {
+        return *reinterpret_cast<T*>(table + slot * 8);
     }
     static void update(void* data) {
         static_cast<SdlVirtualPad*>(data)->apply();
@@ -48,16 +48,16 @@ class SdlVirtualPad {
 
   public:
     uint32_t id = 0;
-    void setup(uintptr_t base) {
+    void setup(uintptr_t table) {
         if (id)
             return;
-        auto attach = api<uint32_t (*)(const VirtualJoystickDesc*)>(base, 28);
-        auto detach = api<bool (*)(uint32_t)>(base, 151);
-        auto isGamepad = api<bool (*)(uint32_t)>(base, 608);
-        auto open = api<void* (*)(uint32_t)>(base, 665);
-        auto error = api<const char* (*)()>(base, 294);
-        setAxis = api<bool (*)(void*, int, int16_t)>(base, 825);
-        setButton = api<bool (*)(void*, int, bool)>(base, 827);
+        auto attach = api<uint32_t (*)(const VirtualJoystickDesc*)>(table, 28);
+        auto detach = api<bool (*)(uint32_t)>(table, 151);
+        auto isGamepad = api<bool (*)(uint32_t)>(table, 608);
+        auto open = api<void* (*)(uint32_t)>(table, 665);
+        auto error = api<const char* (*)()>(table, 294);
+        setAxis = api<bool (*)(void*, int, int16_t)>(table, 825);
+        setButton = api<bool (*)(void*, int, bool)>(table, 827);
         VirtualJoystickDesc desc{};
         desc.version = sizeof(desc);
         desc.type = 1;

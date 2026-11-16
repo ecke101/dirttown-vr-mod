@@ -14,6 +14,9 @@
 #include <mutex>
 #include <string>
 #include <memory>
+#include <filesystem>
+#include <fstream>
+#include <picosha2.h>
 #include <io.h>
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -22,14 +25,16 @@
 #define DT_CALLER __builtin_return_address(0)
 #endif
 #include "game_math.hpp"
+#include "game_builds.hpp"
 #include "eye_distance.hpp"
 #include "game_gpu.hpp"
 #include "xr_input.hpp"
 #include "sdl_virtual_pad.hpp"
 
-// Addresses refer only to Dirt Town Demo build 26658761, verified by the launcher.
+// The launcher and DLL independently select an exact, supported executable.
 namespace {
 uintptr_t base;
+const dtvr::GameBuild* gameBuild = nullptr;
 std::wstring outputDirectory, binaryDirectory, controlsFile;
 FILE* logFile;
 std::mutex logMutex;
@@ -135,15 +140,15 @@ ControlContext controlContext(void* world) {
         return context;
     // Walking avatars also live in the machine array. The native on-foot
     // predicate searches the walker collection at World+0xc7a8.
-    auto onFoot = reinterpret_cast<bool (*)(void*)>(base + 0x939c70);
+    auto onFoot = reinterpret_cast<bool (*)(void*)>(base + gameBuild->onFoot);
     context.seated = !onFoot(world);
-    auto findLoader = reinterpret_cast<void* (*)(void*, void*)>(base + 0x9393b0);
+    auto findLoader = reinterpret_cast<void* (*)(void*, void*)>(base + gameBuild->findLoader);
     if (at<void*>(world, 0xc618) && at<void*>(world, 0xc620))
         context.loader = findLoader(world, machine) != nullptr;
     // Native read-only search of the dozer collection, not a guessed type tag.
     if (!at<void*>(world, 0xc748))
         return context;
-    auto findDozer = reinterpret_cast<void* (*)(void*, void*)>(base + 0x939790);
+    auto findDozer = reinterpret_cast<void* (*)(void*, void*)>(base + gameBuild->findDozer);
     if (void* dozer = findDozer(world, machine)) {
         context.dozer = true;
         context.gradeHold = at<uint8_t>(dozer, 0xe10) != 0;
@@ -293,7 +298,7 @@ void renderStereo(void* renderer, void* cmd, void* world, const void* camera, fl
             try {
                 controllers = std::make_unique<XrInput>();
                 controllers->setup(*xr, controlsFile.c_str());
-                virtualPad.setup(base);
+                virtualPad.setup(base + gameBuild->sdlApiTable);
             } catch (const std::exception& e) {
                 controllers.reset();
                 virtualPad.neutral();
@@ -428,7 +433,8 @@ void renderHook(void* renderer, void* cmd, void* world, const void* camera, floa
     sceneNumber = ++scenes;
     const uintptr_t caller = reinterpret_cast<uintptr_t>(DT_CALLER) - base;
     // Play-mode view, excluding the animated main menu/site browser cameras.
-    if (vrRequested && (caller == 0x244d66 || caller == 0x2ea0bb)) {
+    if (vrRequested &&
+        (caller == gameBuild->playCallers[0] || caller == gameBuild->playCallers[1])) {
         try {
             renderStereo(renderer, cmd, world, camera, time, extra);
         } catch (const std::exception& e) {
@@ -507,10 +513,26 @@ extern "C" __declspec(dllexport) DWORD WINAPI Initialize(LPVOID modulePointer) {
     log("Per-eye resolution scale: %.3f of recommended width/height", resolutionScale);
     auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
     auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->OptionalHeader.SizeOfImage != 0x1e4d000) {
-        log("Unexpected image size: %lx. Hooks not installed.", nt->OptionalHeader.SizeOfImage);
+    const DWORD executableLength = GetModuleFileNameW(nullptr, filename, 32768);
+    if (!executableLength || executableLength >= 32768) {
+        log("Cannot locate the game executable. Hooks not installed.");
         return 1;
     }
+    std::ifstream executable(std::filesystem::path(filename), std::ios::binary);
+    if (!executable) {
+        log("Cannot read the game executable. Hooks not installed.");
+        return 1;
+    }
+    const auto digest = picosha2::hash256_hex_string(std::istreambuf_iterator<char>(executable),
+                                                     std::istreambuf_iterator<char>());
+    gameBuild = dtvr::findGameBuild(digest);
+    if (executable.bad() || !gameBuild ||
+        !gameBuild->matchesImage(nt->OptionalHeader.SizeOfImage, nt->FileHeader.TimeDateStamp)) {
+        log("Unsupported executable: SHA256=%s image=%lx timestamp=%lx. Hooks not installed.",
+            digest.c_str(), nt->OptionalHeader.SizeOfImage, nt->FileHeader.TimeDateStamp);
+        return 1;
+    }
+    log("Dirt Town Demo Steam build %u verified; SHA256=%s", gameBuild->steamBuild, digest.c_str());
     if (MH_Initialize() != MH_OK)
         return 1;
     try {
@@ -526,28 +548,29 @@ extern "C" __declspec(dllexport) DWORD WINAPI Initialize(LPVOID modulePointer) {
     antialiasing = std::strcmp(setting, "1") == 0;
     debugInput = GetEnvironmentVariableA("DIRTTOWN_VR_DEBUG_INPUT", setting, sizeof(setting)) > 0 &&
                  std::strcmp(setting, "1") == 0;
-    bool ok = install(0x64ca00, reinterpret_cast<void*>(renderHook),
+    const auto& hooks = gameBuild->hooks;
+    bool ok = install(hooks.render, reinterpret_cast<void*>(renderHook),
                       reinterpret_cast<void**>(&renderOriginal));
-    ok = install(0xd56660, reinterpret_cast<void*>(vertexHook),
+    ok = install(hooks.vertex, reinterpret_cast<void*>(vertexHook),
                  reinterpret_cast<void**>(&vertexOriginal)) &&
          ok;
-    ok = install(0xd56720, reinterpret_cast<void*>(fragmentHook),
+    ok = install(hooks.fragment, reinterpret_cast<void*>(fragmentHook),
                  reinterpret_cast<void**>(&fragmentOriginal)) &&
          ok;
-    ok = install(0x625620, reinterpret_cast<void*>(projectionHook),
+    ok = install(hooks.projection, reinterpret_cast<void*>(projectionHook),
                  reinterpret_cast<void**>(&projectionOriginal)) &&
          ok;
-    ok = install(0x626430, reinterpret_cast<void*>(resizeHook),
+    ok = install(hooks.resize, reinterpret_cast<void*>(resizeHook),
                  reinterpret_cast<void**>(&resizeOriginal)) &&
          ok;
     // Backend submission also catches SDL's submit-and-acquire-fence path.
-    ok = install(0xe8e140, reinterpret_cast<void*>(submitHook),
+    ok = install(hooks.submit, reinterpret_cast<void*>(submitHook),
                  reinterpret_cast<void**>(&submitOriginal)) &&
          ok;
-    ok = install(0xd3d700, reinterpret_cast<void*>(keyboardHook),
+    ok = install(hooks.keyboard, reinterpret_cast<void*>(keyboardHook),
                  reinterpret_cast<void**>(&keyboardOriginal)) &&
          ok;
-    ok = install(0x299cc0, reinterpret_cast<void*>(analogHook),
+    ok = install(hooks.analog, reinterpret_cast<void*>(analogHook),
                  reinterpret_cast<void**>(&analogOriginal)) &&
          ok;
     if (!ok)

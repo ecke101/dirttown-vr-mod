@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "../vr/game_builds.hpp"
 #include <picosha2.h>
 #include <algorithm>
 #include <cmath>
@@ -235,9 +236,16 @@ std::string windowsPath(const fs::path& file) {
 void validateGame(const Config& config) {
     if (config.game.empty() || !fs::is_regular_file(path(config.game) / "dirttown.exe"))
         throw std::runtime_error("Select the Dirt Town Demo folder containing dirttown.exe");
-    if (fileHash(path(config.game) / "dirttown.exe") != gameHash)
+    if (!dtvr::findGameBuild(fileHash(path(config.game) / "dirttown.exe"))) {
+        std::string builds;
+        for (const auto& build : dtvr::gameBuilds) {
+            if (!builds.empty())
+                builds += ", ";
+            builds += std::to_string(build.steamBuild);
+        }
         throw std::runtime_error(
-            "Unsupported game executable. This mod supports Steam build 26658761 only.");
+            "Unsupported game executable. Supported Dirt Town Demo Steam builds: " + builds + ".");
+    }
 }
 Environment runtimeEnvironment(const Config& config, const Paths& dirs, Environment vars) {
     auto selected = config.runtime.empty()
