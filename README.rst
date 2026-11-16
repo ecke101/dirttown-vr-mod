@@ -1,116 +1,58 @@
 Dirt Town VR Mod
 ================
 
-OpenXR stereo, head tracking, temporal antialiasing and controller support for
-Dirt Town Demo, Steam app 5471710, builds 26658761 and 26690600. Game files and
-saves are not modified. Game menus and HUD remain on the monitor.
+Play **Dirt Town Demo** in VR with OpenXR stereo, head tracking and VR
+controllers. Game files and saves are not modified.
+
+.. image:: docs/images/launcher.png
+   :alt: Dirt Town VR launcher on Linux with launch, headset detection and display controls.
+   :width: 740
 
 Run
 ---
 
-Run ``dirttown-vr.exe`` on Windows x64 or ``./dirttown-vr`` on Linux x86-64.
-No Python installation is needed for the mod. The launcher contains its VR
-DLL, helpers, default controls and licences, and extracts them to a private
-cache. Linux uses the system GTK 3 library and additionally requires Steam,
-Proton with OpenXR support, and the native OpenXR loader.
+You need Dirt Town Demo, a headset and a PC OpenXR runtime. Supported platforms
+are Windows x64 and Linux x86-64. Linux also needs Steam, Proton with OpenXR
+support, GTK 3 and the native OpenXR loader. No Python installation is needed.
 
-Start your PC OpenXR runtime and connect the headset before launching.
-Select the game folder if it is not detected. Click **Detect headset**,
-choose a resolution percentage, then **Launch VR** and load a site on the
-monitor. Start at 50–75% if performance is poor. Preferences are remembered.
+1. Download and extract the package for your platform from `Releases
+   <https://github.com/ecke101/dirttown-vr-mod/releases>`_.
+2. Connect your headset and start your OpenXR runtime. Close Dirt Town if it
+   is already running.
+3. Run ``dirttown-vr.exe`` on Windows or ``./dirttown-vr`` on Linux. Select
+   the game folder if it is not detected.
+4. Click **Detect headset**, choose a render resolution, then **Launch VR**.
+   Start at **50–75%** if performance is poor.
+5. Load a site on your monitor to enter VR. **Menus and HUD stay on the monitor.**
 
-The active OpenXR runtime is used by default. The optional runtime-manifest
-field overrides it for this launch without changing the system selection.
-On Linux, the override uses a private XDG configuration overlay so Proton's
-Windows loader can keep its OpenXR bridge.
+The launcher remembers your preferences.
 
-Graphics **auto** chooses D3D12 when advertised by the runtime, otherwise D3D11
-through D3D11On12 or shared textures. The D3D11 fallback remains experimental
-and requires working graphics interoperability. Both the game and VR runtime
-must use the same GPU. Other runtimes
-and headsets require testing; OpenXR support alone is not a compatibility claim.
-
-Controls
---------
-
-* F9: recenter. F10: toggle VR. F11: toggle temporal antialiasing.
-  Antialiasing is off by default; enable it in the launcher or with F11.
-  The headset also recenters after tracking recovery, runtime origin changes,
-  loading a scene, entering/exiting a vehicle, and re-enabling VR.
-* Shift+F9 / Shift+F10: decrease / increase eye distance in 0.1x steps, from
-  0.5x to 2x. A label in the headset shows the value for four seconds.
-  1x uses the eye spacing reported by OpenXR. Only eye separation changes;
-  leaning and camera orbit keep their normal movement. Resets to 1x on restart.
-* Dozer: left stick drives/steers; right stick lifts/rolls the blade.
-  Left/right triggers angle the blade left/right. Hold the left grip with the
-  triggers to adjust forward/back pitch. Triggers do not drive the dozer.
-* Walking: left stick moves; right stick turns/looks. Head tracking also works.
-* Wheel loaders: right stick lifts/curls the bucket with analog control,
-  independently of camera input and desktop gamepad bindings.
-* B/right secondary: toggle grade hold. Leave it off for manual blade control.
-* Y/left secondary: enter/exit. X/left primary: interact.
-* Right grip + B/right secondary: free tilt. Left grip + Y: tailgate action.
-* Left-stick click + right stick: dozer blade angle/pitch.
-* Right-stick click: change camera. Both stick clicks: pause/menu.
-* Triggers and grips otherwise follow the game's native vehicle bindings.
-
-Bindings are provided for Touch, Pico 4, Index, Vive, Microsoft motion
-controllers and Khronos simple controllers. Index uses its left A/B buttons
-for the left-primary/secondary actions. Vive uses trackpads for axes, pad clicks
-for primary actions, and menu buttons for secondary actions; pad movement is
-neutral when untouched. Microsoft motion controllers use thumbsticks, pad
-clicks and menu buttons. Simple controllers provide buttons only; use the
-keyboard/gamepad for driving. Devices with fewer buttons need keyboard
-fallbacks for actions without an equivalent input.
-
-**Controller settings...** opens your saved ``controls.ini``. Set deadzone, grip
-threshold, hand swapping, axis inversion or per-profile OpenXR component
-bindings there. Restart the game after editing. Controller input is released
-when tracking input becomes inactive, VR loses focus, or updates go stale.
-
-Command line
+Key controls
 ------------
 
-From the extracted folder::
+* **F9**: recenter. **F10**: toggle VR. **F11**: toggle antialiasing
+  (off by default).
+* **Left stick**: move, drive and steer. **Right stick**: look while walking;
+  control the blade or bucket in a dozer or loader.
+* **Y / left secondary**: enter or exit. **X / left primary**: interact.
+  **B / right secondary**: toggle grade hold.
+* **Right-stick click**: change camera. **Both stick clicks**: pause/menu.
 
-    dirttown-vr runtime
-    dirttown-vr launch
-    dirttown-vr --resolution-scale 0.5 --no-controllers launch
-    dirttown-vr --runtime /path/to/runtime.json launch
-    dirttown-vr probe
-    dirttown-vr gpu-test
+Use **Controller settings...** to edit bindings, then restart the game.
+See the `full controls and reference <docs/reference.rst>`_ for dozer blade
+adjustments, controller profiles and eye-distance shortcuts.
 
-Use ``./dirttown-vr`` on Linux or ``dirttown-vr.exe`` on Windows. ``--game``
-selects the game directory; ``--proton`` selects a Linux Proton executable.
-``--graphics d3d12`` or ``d3d11`` selects a graphics path. **Open logs** opens
-the log folder. **Test headset** displays a tracked cube; it does not load
-the game. **Licences** opens the bundled dependency notices.
+Compatibility and troubleshooting
+---------------------------------
 
-Windows settings and logs are under ``%LOCALAPPDATA%/DirtTownVR``. Linux uses
-``$XDG_CONFIG_HOME/dirttown-vr-mod`` for settings and
-``$XDG_STATE_HOME/dirttown-vr-mod/logs`` for logs (defaulting to
-``~/.config`` and ``~/.local/state``). Existing development settings are
-imported from ``.local`` on the first run.
+* Supports **Dirt Town Demo**, Steam app **5471710**, builds **26658761** and
+  **26690600**.
+* Tested with **Pico 4 through WiVRn/Proton on Linux**. Windows runtimes and
+  other headset/controller combinations still need physical testing.
+* The game and VR runtime must use the **same GPU**. Leave the graphics backend
+  on **Automatic** to start; the D3D11 fallback is experimental.
+* Open **Troubleshooting & controls** in the launcher to **Test headset**,
+  **Test graphics** or **Open logs**.
 
-Build and test
---------------
-
-Python is needed only to build and test the source. Install Python 3.10+
-and CMake. Windows builds use Visual Studio C++ tools. Linux builds also
-need GCC, Ninja, GTK 3 development headers and x86-64 MinGW-w64 11+ with POSIX
-thread support::
-
-    python tools/build_vr.py
-    python -m unittest discover -s tests -v
-    .local/vr/bin/dirttown-vr self-test
-
-Use ``python3`` on Linux and ``.local/vr/bin/dirttown-vr.exe self-test`` on
-Windows. The builder downloads hash-verified dependencies and produces the
-bundled launchers in ``.local/vr/bin``. ``run.sh`` / ``run.bat`` start these
-development builds. Optional packaging is manual with
-``python tools/package.py --platform windows`` or ``--platform linux``;
-CI builds, tests and uploads packages for both platforms. Hardware VR checks
-must run on the target system.
-
-Validated hardware: Pico 4 through WiVRn/Proton on Linux. Windows runtimes and
-other controller/headset combinations are implemented but need physical tests.
+For command-line options, runtime overrides, log locations and building from
+source, see the `reference <docs/reference.rst>`_.

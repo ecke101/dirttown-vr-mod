@@ -1,0 +1,106 @@
+Dirt Town VR reference
+======================
+
+See the `README <../README.rst>`_ for downloads and launch instructions.
+
+Advanced setup
+--------------
+
+The launcher contains its VR DLL, helpers, default controls and licences,
+and extracts them to a private cache.
+
+The active OpenXR runtime is used by default. The optional runtime-manifest
+field overrides it for this launch without changing the system selection.
+On Linux, the override uses a private XDG configuration overlay so Proton's
+Windows loader can keep its OpenXR bridge.
+
+Graphics **auto** chooses D3D12 when advertised by the runtime, otherwise D3D11
+through D3D11On12 or shared textures. The D3D11 fallback remains experimental
+and requires working graphics interoperability. Both the game and VR runtime
+must use the same GPU. Other runtimes
+and headsets require testing; OpenXR support alone is not a compatibility claim.
+
+Controls
+--------
+
+* F9: recenter. F10: toggle VR. F11: toggle temporal antialiasing.
+  Antialiasing is off by default; enable it in the launcher or with F11.
+  The headset also recenters after tracking recovery, runtime origin changes,
+  loading a scene, entering/exiting a vehicle, and re-enabling VR.
+* Shift+F9 / Shift+F10: decrease / increase eye distance in 0.1x steps, from
+  0.5x to 2x. A label in the headset shows the value for four seconds.
+  1x uses the eye spacing reported by OpenXR. Only eye separation changes;
+  leaning and camera orbit keep their normal movement. Resets to 1x on restart.
+* Dozer: left stick drives/steers; right stick lifts/rolls the blade.
+  Left/right triggers angle the blade left/right. Hold the left grip with the
+  triggers to adjust forward/back pitch. Triggers do not drive the dozer.
+* Walking: left stick moves; right stick turns/looks. Head tracking also works.
+* Wheel loaders: right stick lifts/curls the bucket with analog control,
+  independently of camera input and desktop gamepad bindings.
+* B/right secondary: toggle grade hold. Leave it off for manual blade control.
+* Y/left secondary: enter/exit. X/left primary: interact.
+* Right grip + B/right secondary: free tilt. Left grip + Y: tailgate action.
+* Left-stick click + right stick: dozer blade angle/pitch.
+* Right-stick click: change camera. Both stick clicks: pause/menu.
+* Triggers and grips otherwise follow the game's native vehicle bindings.
+
+Bindings are provided for Touch, Pico 4, Index, Vive, Microsoft motion
+controllers and Khronos simple controllers. Index uses its left A/B buttons
+for the left-primary/secondary actions. Vive uses trackpads for axes, pad clicks
+for primary actions, and menu buttons for secondary actions; pad movement is
+neutral when untouched. Microsoft motion controllers use thumbsticks, pad
+clicks and menu buttons. Simple controllers provide buttons only; use the
+keyboard/gamepad for driving. Devices with fewer buttons need keyboard
+fallbacks for actions without an equivalent input.
+
+**Controller settings...** opens your saved ``controls.ini``. Set deadzone, grip
+threshold, hand swapping, axis inversion or per-profile OpenXR component
+bindings there. Restart the game after editing. Controller input is released
+when tracking input becomes inactive, VR loses focus, or updates go stale.
+
+Command line
+------------
+
+From the extracted folder::
+
+    dirttown-vr runtime
+    dirttown-vr launch
+    dirttown-vr --resolution-scale 0.5 --no-controllers launch
+    dirttown-vr --runtime /path/to/runtime.json launch
+    dirttown-vr probe
+    dirttown-vr gpu-test
+
+Use ``./dirttown-vr`` on Linux or ``dirttown-vr.exe`` on Windows. ``--game``
+selects the game directory; ``--proton`` selects a Linux Proton executable.
+``--graphics d3d12`` or ``d3d11`` selects a graphics path. **Open logs** opens
+the log folder. **Test headset** displays a tracked cube; it does not load
+the game. **Licences** opens the bundled dependency notices.
+
+Settings and logs
+-----------------
+
+Windows settings and logs are under ``%LOCALAPPDATA%/DirtTownVR``. Linux uses
+``$XDG_CONFIG_HOME/dirttown-vr-mod`` for settings and
+``$XDG_STATE_HOME/dirttown-vr-mod/logs`` for logs (defaulting to
+``~/.config`` and ``~/.local/state``). Existing development settings are
+imported from ``.local`` on the first run.
+
+Build and test
+--------------
+
+Python is needed only to build and test the source. Install Python 3.10+
+and CMake. Windows builds use Visual Studio C++ tools. Linux builds also
+need GCC, Ninja, GTK 3 development headers and x86-64 MinGW-w64 11+ with POSIX
+thread support::
+
+    python tools/build_vr.py
+    python -m unittest discover -s tests -v
+    .local/vr/bin/dirttown-vr self-test
+
+Use ``python3`` on Linux and ``.local/vr/bin/dirttown-vr.exe self-test`` on
+Windows. The builder downloads hash-verified dependencies and produces the
+bundled launchers in ``.local/vr/bin``. ``run.sh`` / ``run.bat`` start these
+development builds. Optional packaging is manual with
+``python tools/package.py --platform windows`` or ``--platform linux``;
+CI builds, tests and uploads packages for both platforms. Hardware VR checks
+must run on the target system.
