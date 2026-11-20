@@ -36,12 +36,29 @@ struct ProbeRenderer {
     Matrix model = identity();
     bool anchored = false;
 
-    void createDevice(const XrGraphicsRequirementsD3D12KHR& requirements) {
+    void createDevice(const XrBridge& xr) {
         ComPtr<IDXGIFactory4> factory;
         check_hr(CreateDXGIFactory1(IID_PPV_ARGS(&factory)), "Create DXGI factory");
         ComPtr<IDXGIAdapter1> adapter;
-        check_hr(factory->EnumAdapterByLuid(requirements.adapterLuid, IID_PPV_ARGS(&adapter)),
-                 "Find headset GPU");
+        const auto& requirements = xr.requirements;
+        if (xr.tryUnspecifiedAdapter) {
+            for (UINT i = 0;; ++i) {
+                const auto hr = factory->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf());
+                if (hr == DXGI_ERROR_NOT_FOUND)
+                    throw std::runtime_error(
+                        "SteamVR reported a zero GPU ID and no hardware adapter supports its required D3D12 feature level");
+                check_hr(hr, "Enumerate GPU for headset test");
+                DXGI_ADAPTER_DESC1 candidate{};
+                check_hr(adapter->GetDesc1(&candidate), "Read GPU description");
+                if (!(candidate.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+                    SUCCEEDED(D3D12CreateDevice(adapter.Get(), requirements.minFeatureLevel,
+                                                __uuidof(ID3D12Device), nullptr)))
+                    break;
+            }
+        } else {
+            check_hr(factory->EnumAdapterByLuid(requirements.adapterLuid, IID_PPV_ARGS(&adapter)),
+                     "Find headset GPU");
+        }
         DXGI_ADAPTER_DESC1 desc{};
         adapter->GetDesc1(&desc);
         std::printf("D3D12 adapter: %ls\n", desc.Description);
@@ -226,8 +243,8 @@ int main(int argc, char** argv) {
         loader = loader.substr(0, loader.find_last_of(L"\\/")) + L"\\openxr_loader.dll";
         ProbeRenderer renderer;
         XrBridge xr;
-        auto requirements = xr.prepare(loader.c_str());
-        renderer.createDevice(requirements);
+        xr.prepare(loader.c_str());
+        renderer.createDevice(xr);
         xr.bind(renderer.device.Get(), renderer.queue.Get());
         renderer.setup(xr);
         const auto started = std::chrono::steady_clock::now();

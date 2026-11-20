@@ -104,6 +104,7 @@ class XrBridge {
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     XrGraphicsRequirementsD3D12KHR requirements{XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR};
     bool useD3D11 = false;
+    bool tryUnspecifiedAdapter = false;
     uint32_t renderWidth = 0, renderHeight = 0;
     ComPtr<ID3D11Device> device11;
     ComPtr<ID3D11DeviceContext> context11;
@@ -122,7 +123,7 @@ class XrBridge {
         if (!pointer)
             throw std::runtime_error(std::string("Missing OpenXR function: ") + name);
     }
-    XrGraphicsRequirementsD3D12KHR prepare(const wchar_t* loaderPath) {
+    void prepare(const wchar_t* loaderPath) {
         loader = LoadLibraryW(loaderPath);
         if (!loader)
             throw std::runtime_error("Cannot load the Khronos openxr_loader.dll (Win32 " +
@@ -204,12 +205,20 @@ class XrBridge {
                     (unsigned long)requirements.adapterLuid.HighPart,
                     (unsigned long)requirements.adapterLuid.LowPart,
                     (unsigned)requirements.minFeatureLevel);
-        return requirements;
+        // SteamVR/OpenXR 2.18.4 can report success with an all-zero D3D12
+        // LUID. In that case let session creation validate the actual device.
+        tryUnspecifiedAdapter =
+            !useD3D11 && std::strcmp(properties.runtimeName, "SteamVR/OpenXR") == 0 &&
+            requirements.adapterLuid.HighPart == 0 && requirements.adapterLuid.LowPart == 0;
     }
     void bind(ID3D12Device* device, ID3D12CommandQueue* queue, float resolutionScale = 0.5f) {
         const auto actual = device->GetAdapterLuid();
-        if (actual.HighPart != requirements.adapterLuid.HighPart ||
-            actual.LowPart != requirements.adapterLuid.LowPart)
+        if (tryUnspecifiedAdapter)
+            std::printf(
+                "SteamVR reported a zero D3D12 adapter ID. Trying GPU %08lx:%08lx for the session.\n",
+                (unsigned long)actual.HighPart, (unsigned long)actual.LowPart);
+        else if (actual.HighPart != requirements.adapterLuid.HighPart ||
+                 actual.LowPart != requirements.adapterLuid.LowPart)
             throw std::runtime_error(
                 "Game and OpenXR runtime use different GPUs. Select the same GPU for the game and VR runtime, then restart.");
         D3D12_FEATURE_DATA_FEATURE_LEVELS levels{};
