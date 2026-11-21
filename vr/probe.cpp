@@ -1,4 +1,5 @@
 #include "xr_d3d12.hpp"
+#include <dxgi1_6.h>
 #include <d3dcompiler.h>
 #include <chrono>
 #include <thread>
@@ -42,8 +43,15 @@ struct ProbeRenderer {
         ComPtr<IDXGIAdapter1> adapter;
         const auto& requirements = xr.requirements;
         if (xr.tryUnspecifiedAdapter) {
+            // Prefer the discrete GPU on hybrid systems when OpenXR gives us no adapter ID.
+            ComPtr<IDXGIFactory6> preferences;
+            factory.As(&preferences);
             for (UINT i = 0;; ++i) {
-                const auto hr = factory->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf());
+                adapter.Reset();
+                const auto hr = preferences ? preferences->EnumAdapterByGpuPreference(
+                                                  i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
+                                                  IID_PPV_ARGS(&adapter))
+                                            : factory->EnumAdapters1(i, &adapter);
                 if (hr == DXGI_ERROR_NOT_FOUND)
                     throw std::runtime_error(
                         "SteamVR reported a zero GPU ID and no hardware adapter supports its required D3D12 feature level");
